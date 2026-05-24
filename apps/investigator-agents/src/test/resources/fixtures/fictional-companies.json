@@ -1,0 +1,62 @@
+[
+  {
+    "id": "c1",
+    "name": "Costruzioni Ferretti Srl",
+    "registrationNumber": "BS-12345",
+    "jurisdiction": "IT",
+    "legalForm": "Srl",
+    "active": true,
+    "vatNumber": "IT03456789012",
+    "sector": "F41 - Construction of buildings"
+  },
+  {
+    "id": "c2",
+    "name": "LuxHold SA",
+    "registrationNumber": "LU-B987654",
+    "jurisdiction": "LU",
+    "legalForm": "SA",
+    "active": true,
+    "vatNumber": "LU12345678",
+    "sector": "M70 - Holding companies"
+  },
+  {
+    "id": "c3",
+    "name": "Edilizia Morandi SpA",
+    "registrationNumber": "BS-67890",
+    "jurisdiction": "IT",
+    "legalForm": "SpA",
+    "active": true,
+    "vatNumber": "IT07654321098",
+    "sector": "F41 - Construction of buildings"
+  },
+  {
+    "id": "c4",
+    "name": "Conti Brothers Holdings Ltd",
+    "registrationNumber": "BVI-0023456",
+    "jurisdiction": "VG",
+    "legalForm": "Ltd",
+    "active": true,
+    "vatNumber": null,
+    "sector": "M70 - Holding companies"
+  },
+  {
+    "id": "c5",
+    "name": "Infrastrutture del Nord Srl",
+    "registrationNumber": "MI-34567",
+    "jurisdiction": "IT",
+    "legalForm": "Srl",
+    "active": true,
+    "vatNumber": "IT05678901234",
+    "sector": "F42 - Civil engineering"
+  },
+  {
+    "id": "c6",
+    "name": "Esposito Offshore Finance SA",
+    "registrationNumber": "LU-C543210",
+    "jurisdiction": "LU",
+    "legalForm": "SA",
+    "active": false,
+    "vatNumber": null,
+    "sector": "K64 - Financial service activities"
+  }
+]

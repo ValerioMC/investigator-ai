@@ -1,0 +1,23 @@
+===DOCUMENT 1===
+SOURCE: corriere-brescia-fictizio.it
+TYPE: NEWS_ARTICLE
+DATE: 2021-09-14
+TITLE: Appalti comunali, indagine sui legami tra imprenditori e politici
+---
+La Procura di Brescia ha aperto un fascicolo conoscitivo sui rapporti tra il consigliere comunale Marco Ferretti e la società di costruzioni di cui risulta socio di maggioranza, Costruzioni Ferretti Srl. La società ha ottenuto due appalti pubblici dal Comune di Brescia negli ultimi tre anni, per un valore complessivo di circa 1,65 milioni di euro. Ferretti, contattato dalla nostra redazione, ha dichiarato di non aver mai partecipato alle delibere di aggiudicazione. Il gruppo di opposizione ha depositato un'interrogazione urgente in consiglio comunale.
+
+===DOCUMENT 2===
+SOURCE: registro-imprese-fictizio.it
+TYPE: COMPANY_FILING
+DATE: 2020-06-01
+TITLE: Visura camerale - LuxHold SA - Quote societarie Costruzioni Ferretti Srl
+---
+Dalla visura camerale aggiornata al 1 giugno 2020 risulta che LuxHold SA, società di diritto lussemburghese con sede in Avenue de la Liberté, Luxembourg, detiene il 51% del capitale sociale di Costruzioni Ferretti Srl. Il titolare effettivo di LuxHold SA, secondo la dichiarazione UBO depositata presso il Registro delle imprese del Lussemburgo, è Mario Conti, nato a Brescia nel 1961, fratello di Luigi Conti, sindaco di Brescia dal 2016. La partecipazione è detenuta tramite una struttura fiduciaria il cui trustee è uno studio di avvocati con sede a Lussemburgo.
+
+===DOCUMENT 3===
+SOURCE: gazzetta-giudiziaria-fictizio.it
+TYPE: COURT_RECORD
+DATE: 2019-11-28
+TITLE: Tribunale di Brescia - Sentenza n. 1243/2019 - Roberto Esposito - Corruzione
+---
+Il Tribunale di Brescia, con sentenza n. 1243/2019 depositata in data 28 novembre 2019, ha condannato Roberto Esposito, nato a Napoli il 5 settembre 1960, alla pena di 4 anni e 6 mesi di reclusione per il reato di corruzione in atti giudiziari e per atti contrari ai doveri d'ufficio. Esposito è risultato essere il titolare effettivo di tre società offshore nelle Isole Vergini Britanniche, tra cui Conti Brothers Holdings Ltd, attraverso cui venivano canalizzati i proventi illeciti. Il tribunale ha disposto la confisca di beni per un valore stimato di 2,3 milioni di euro.

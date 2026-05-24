@@ -1,0 +1,195 @@
+sequenceDiagram
+    autonumber
+
+    actor FE as Frontend
+    participant IR as InvestigationResource<br/>/api/v1/investigate
+    participant SA as SupervisorAgent<br/>(LangChain4j proxy)
+    participant LLM as OllamaChatModel<br/>(qwen3.6:35b, JSON mode)
+    participant GT as GraphTraversalTool
+    participant VT as VectorSearchTool
+    participant FT as FinancialAnalysisTool
+    participant GS as GraphService
+    participant GR as Neo4jGraphRepository
+    participant VR as VectorRepository
+    participant ES as EmbeddingService
+    participant Neo4j as Neo4j
+    participant Qdrant as Qdrant
+    participant MM as Micrometer
+    participant LF as Langfuse
+
+    %% ── Entry point ──────────────────────────────────────────────────
+    FE->>+IR: POST /api/v1/investigate<br/>{query, depth, focusEntities}
+
+    IR->>MM: counter("investigations.total").increment()
+    IR->>MM: Timer.start()
+    IR->>IR: validate InvestigateRequest<br/>(blank query → 400, depth clamp 1–10)
+    IR->>IR: buildPrompt(query + focusHint + depthHint)
+
+    %% ── Supervisor LLM call ──────────────────────────────────────────
+    IR->>+SA: investigate(prompt)
+    SA->>+LF: trace span "SupervisorAgent.investigate"
+    SA->>+LLM: chat(systemPrompt + userPrompt)<br/>responseFormat=JSON
+
+    %% ── Tool loop — Supervisor decides which tools to call ───────────
+    note over LLM,GT: Supervisor reasons over the query and dispatches tools.<br/>Tool calls are interleaved — order depends on LLM reasoning.
+
+    %% GraphTraversalTool calls (any subset, shown as options)
+    opt findCompaniesByPerson
+        LLM->>+GT: findCompaniesByPerson(personFullName)
+        GT->>MM: counter("graph.tool.calls", tool=findCompaniesByPerson)
+        GT->>+GS: findCompaniesByPerson(fullName)
+        GS->>+GR: findCompaniesByPerson(fullName)
+        GR->>+Neo4j: MATCH (p:Person {fullName:$name})-[:OWNS|IS_DIRECTOR_OF]->(c:Company)<br/>RETURN c
+        Neo4j-->>-GR: CompanyNode[]
+        GR-->>-GS: CompanyNode[]
+        GS-->>-GT: CompanyNode[]
+        GT-->>-LLM: "COMPANIES CONTROLLED BY …"
+    end
+
+    opt findUBO
+        LLM->>+GT: findUBO(companyName)
+        GT->>+GS: findUBO(companyName)
+        GS->>+GR: findUBO(companyName)
+        GR->>+Neo4j: MATCH path=(p:Person)-[:OWNS|CONTROLS*1..5]->(c:Company {name:$name})<br/>RETURN p
+        Neo4j-->>-GR: PersonNode[]
+        GR-->>-GS: PersonNode[]
+        GS-->>-GT: PersonNode[]
+        GT-->>-LLM: "ULTIMATE BENEFICIAL OWNERS of …"
+    end
+
+    opt findOwnershipChain
+        LLM->>+GT: findOwnershipChain(companyName)
+        GT->>+GS: findOwnershipChain(companyName)
+        GS->>+GR: findOwnershipChain(companyName)
+        GR->>+Neo4j: MATCH (owner)-[r:OWNS]->(c:Company {name:$name})<br/>RETURN owner.fullName, r.sharePercent, …
+        Neo4j-->>-GR: OwnershipEntry[]
+        GR-->>-GS: OwnershipEntry[]
+        GS-->>-GT: OwnershipEntry[]
+        GT-->>-LLM: "OWNERSHIP CHAIN for …"
+    end
+
+    opt detectConflictOfInterest
+        LLM->>+GT: detectConflictOfInterest(personName, dateFrom, dateTo)
+        GT->>+GS: detectConflictsForPerson(personName)<br/>or detectConflictsOfInterest(from, to)
+        GS->>+GR: detectConflictsForPerson / detectConflictsOfInterest
+        GR->>+Neo4j: MATCH (p:Person)-[:HELD_PUBLIC_ROLE]->(b:PublicBody)-[:ISSUED]->(ct:Contract)<br/>      -[:AWARDED_TO]->(c:Company)<-[:OWNS|IS_DIRECTOR_OF]-(p)<br/>WHERE date range<br/>RETURN p, b, ct, c, ct.amount
+        Neo4j-->>-GR: ConflictEntry[]
+        GR-->>-GS: ConflictEntry[]
+        GS-->>-GT: ConflictEntry[]
+        GT-->>-LLM: "CONFLICTS OF INTEREST DETECTED: …"
+    end
+
+    opt findTaxHavenConnections
+        LLM->>+GT: findTaxHavenConnections(personName)
+        GT->>+GS: findTaxHavenConnections(personName)
+        GS->>+GR: findTaxHavenConnections(personName)
+        GR->>+Neo4j: MATCH (p:Person)-[:OWNS]->(c:Company)-[:REGISTERED_IN]->(j:Jurisdiction {taxHaven:true})<br/>RETURN c, j
+        Neo4j-->>-GR: TaxHavenEntry[]
+        GR-->>-GS: TaxHavenEntry[]
+        GS-->>-GT: TaxHavenEntry[]
+        GT-->>-LLM: "TAX HAVEN CONNECTIONS for …"
+    end
+
+    opt findConvictions
+        LLM->>+GT: findConvictions(personName)
+        GT->>+GS: findConvictions(personName)
+        GS->>+GR: findConvictions(personName)
+        GR->>+Neo4j: MATCH (p:Person {fullName:$name})-[r:CONVICTED_OF]->(cr:Crime)<br/>RETURN cr, r.year, r.court, r.status
+        Neo4j-->>-GR: ConvictionEntry[]
+        GR-->>-GS: ConvictionEntry[]
+        GS-->>-GT: ConvictionEntry[]
+        GT-->>-LLM: "CRIMINAL RECORD for …"
+    end
+
+    opt findFamilyNetwork
+        LLM->>+GT: findFamilyNetwork(personName)
+        GT->>+GS: findFamilyNetwork(personName)
+        GS->>+GR: findFamilyNetwork(personName)
+        GR->>+Neo4j: MATCH (p:Person {fullName:$name})-[r:FAMILY_RELATION]-(rel:Person)<br/>RETURN rel.fullName, r.type
+        Neo4j-->>-GR: FamilyEntry[]
+        GR-->>-GS: FamilyEntry[]
+        GS-->>-GT: FamilyEntry[]
+        GT-->>-LLM: "FAMILY NETWORK of …"
+    end
+
+    opt findShortestPath
+        LLM->>+GT: findShortestPath(person1, person2)
+        GT->>+GS: shortestPath(person1, person2)
+        GS->>+GR: shortestPath(person1, person2)
+        GR->>+Neo4j: MATCH path=shortestPath((a:Person {fullName:$p1})-[*1..6]-(b:Person {fullName:$p2}))<br/>RETURN [n IN nodes(path) | coalesce(n.fullName, n.name)]
+        Neo4j-->>-GR: PathResult (hops, nodeNames)
+        GR-->>-GS: PathResult
+        GS-->>-GT: PathResult
+        GT-->>-LLM: "CONNECTION PATH (N hops): A → … → B"
+    end
+
+    opt findContractsWonByCompany
+        LLM->>+GT: findContractsWonByCompany(companyName)
+        GT->>+GS: findContractsWonByCompany(companyName)
+        GS->>+GR: findContractsWonByCompany(companyName)
+        GR->>+Neo4j: MATCH (ct:Contract)-[:AWARDED_TO]->(c:Company {name:$name})<br/>      OPTIONAL MATCH (pb:PublicBody)-[:ISSUED]->(ct)<br/>RETURN ct, pb.name
+        Neo4j-->>-GR: ContractEntry[]
+        GR-->>-GS: ContractEntry[]
+        GS-->>-GT: ContractEntry[]
+        GT-->>-LLM: "CONTRACTS WON BY … (total: €N)"
+    end
+
+    opt findDocumentsForPerson
+        LLM->>+GT: findDocumentsForPerson(personName)
+        GT->>+GS: findDocumentsForPerson(personName)
+        GS->>+GR: findDocumentsForPerson(personName)
+        GR->>+Neo4j: MATCH (p:Person {fullName:$name})-[r:MENTIONED_IN]->(d:Document)<br/>RETURN d.title, d.sourceType, d.sourceUrl, r.context, d.reliability
+        Neo4j-->>-GR: DocumentRef[]
+        GR-->>-GS: DocumentRef[]
+        GS-->>-GT: DocumentRef[]
+        GT-->>-LLM: "DOCUMENTS MENTIONING …"
+    end
+
+    %% VectorSearchTool calls
+    opt searchDocuments / searchDocumentsForPerson / searchDocumentsForCompany
+        LLM->>+VT: searchDocuments(query)<br/>or searchDocumentsForPerson(name)<br/>or searchDocumentsForCompany(name)
+        VT->>MM: counter("vector.tool.calls", tool=searchDocuments)
+        VT->>+ES: embed(query)
+        ES-->>-VT: List<Float> [768-dim]
+        VT->>+VR: search(query, topK=5, collection)
+        VR->>+Qdrant: SearchPoints {collectionName, vector, limit, withPayload}
+        Qdrant-->>-VR: ScoredPoint[] (id, score, payload)
+        VR-->>-VT: SearchResult[]
+        VT-->>-LLM: "DOCUMENT SEARCH RESULTS for: …"
+    end
+
+    opt searchLegalDocuments
+        LLM->>+VT: searchLegalDocuments(query)
+        VT->>+ES: embed(query)
+        ES-->>-VT: List<Float> [768-dim]
+        VT->>+VR: search(query, topK=5, collection="court_records")
+        VR->>+Qdrant: SearchPoints {collectionName="court_records", …}
+        Qdrant-->>-VR: ScoredPoint[]
+        VR-->>-VT: SearchResult[]
+        VT-->>-LLM: "LEGAL DOCUMENTS for: …"
+    end
+
+    %% FinancialAnalysisTool calls (purely local — no DB)
+    opt analyzeBalanceSheet
+        LLM->>+FT: analyzeBalanceSheet(balanceSheetJson)
+        note right of FT: Pure computation — no DB call.<br/>Checks margin vs 8% sector avg,<br/>flags dividends > operatingProfit.
+        FT-->>-LLM: "FINANCIAL ANALYSIS for … VERDICT: …"
+    end
+
+    opt detectRevenueContractCorrelation
+        LLM->>+FT: detectRevenueContractCorrelation(dataJson)
+        note right of FT: Correlates contract award years<br/>with revenue spikes (>30% YoY).
+        FT-->>-LLM: "CONTRACT-REVENUE CORRELATION for …"
+    end
+
+    %% ── LLM synthesises final JSON report ───────────────────────────
+    LLM-->>-SA: raw JSON string (InvestigationReport)
+    SA->>-LF: end span (tokens, latency)
+
+    %% ── Back in InvestigationResource ───────────────────────────────
+    SA-->>IR: rawResponse (String)
+    IR->>IR: parseOrWrap(rawResponse, originalQuery)<br/>→ strip ```json fences → ObjectMapper.readValue()<br/>→ fallback: wrap raw text in InvestigationReport
+    IR->>MM: counter("investigations.success").increment()
+    IR->>MM: timer("investigations.latency").stop()
+
+    IR-->>-FE: 200 OK — InvestigationReport JSON<br/>{query, summary, findings[], entityMap, recommendedFollowUps, disclaimer}

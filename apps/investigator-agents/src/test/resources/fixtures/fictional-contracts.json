@@ -1,0 +1,32 @@
+[
+  {
+    "id": "ct1",
+    "title": "Riqualificazione Piazza Loggia - Lotto 1",
+    "amount": 1200000.00,
+    "awardedAt": "2021-03-15",
+    "cpvCode": "45212350",
+    "publicBodyName": "Comune di Brescia",
+    "source": "ANAC",
+    "awardedTo": "Costruzioni Ferretti Srl"
+  },
+  {
+    "id": "ct2",
+    "title": "Manutenzione strade comunali 2022-2024",
+    "amount": 450000.00,
+    "awardedAt": "2022-07-01",
+    "cpvCode": "45233141",
+    "publicBodyName": "Comune di Brescia",
+    "source": "ANAC",
+    "awardedTo": "Costruzioni Ferretti Srl"
+  },
+  {
+    "id": "ct3",
+    "title": "Nuova scuola primaria quartiere Urago",
+    "amount": 3800000.00,
+    "awardedAt": "2020-11-20",
+    "cpvCode": "45214200",
+    "publicBodyName": "Comune di Brescia",
+    "source": "TED_EU",
+    "awardedTo": "Edilizia Morandi SpA"
+  }
+]

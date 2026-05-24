@@ -1,0 +1,82 @@
+[
+  {
+    "id": "p1",
+    "fullName": "Marco Ferretti",
+    "birthDate": "1968-04-12",
+    "nationality": "IT",
+    "politicalRole": "Consigliere comunale Brescia",
+    "riskScore": 0.82
+  },
+  {
+    "id": "p2",
+    "fullName": "Luigi Conti",
+    "birthDate": "1955-11-03",
+    "nationality": "IT",
+    "politicalRole": "Sindaco di Brescia",
+    "riskScore": 0.75
+  },
+  {
+    "id": "p3",
+    "fullName": "Mario Conti",
+    "birthDate": "1961-07-22",
+    "nationality": "IT",
+    "politicalRole": null,
+    "riskScore": 0.65
+  },
+  {
+    "id": "p4",
+    "fullName": "Giulia Morandi",
+    "birthDate": "1979-02-14",
+    "nationality": "IT",
+    "politicalRole": null,
+    "riskScore": 0.30
+  },
+  {
+    "id": "p5",
+    "fullName": "Roberto Esposito",
+    "birthDate": "1960-09-05",
+    "nationality": "IT",
+    "politicalRole": null,
+    "riskScore": 0.91
+  },
+  {
+    "id": "p6",
+    "fullName": "Carla Bianchi",
+    "birthDate": "1972-03-18",
+    "nationality": "IT",
+    "politicalRole": "Assessore ai lavori pubblici Brescia",
+    "riskScore": 0.55
+  },
+  {
+    "id": "p7",
+    "fullName": "Antonio Ricci",
+    "birthDate": "1964-12-01",
+    "nationality": "IT",
+    "politicalRole": null,
+    "riskScore": 0.40
+  },
+  {
+    "id": "p8",
+    "fullName": "Federica Gentile",
+    "birthDate": "1981-06-30",
+    "nationality": "IT",
+    "politicalRole": null,
+    "riskScore": 0.25
+  },
+  {
+    "id": "p9",
+    "fullName": "Alessandro Martini",
+    "birthDate": "1970-08-15",
+    "nationality": "IT",
+    "politicalRole": "Presidente commissione appalti",
+    "riskScore": 0.68
+  },
+  {
+    "id": "p10",
+    "fullName": "Stefano Russo",
+    "birthDate": "1958-01-20",
+    "nationality": "IT",
+    "politicalRole": null,
+    "riskScore": 0.45
+  }
+]
