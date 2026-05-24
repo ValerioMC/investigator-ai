@@ -1,6 +1,6 @@
 package ai.investigator.web.resource;
 
-import ai.investigator.agents.supervisor.SupervisorAgent;
+import ai.investigator.agents.supervisor.InvestigationOrchestrator;
 import ai.investigator.web.dto.SessionDto;
 import ai.investigator.web.entity.InvestigationSession;
 import ai.investigator.web.entity.InvestigationSession.Status;
@@ -29,17 +29,17 @@ public class SessionResource {
     private static final UUID DEFAULT_WORKSPACE =
         UUID.fromString("00000000-0000-0000-0000-000000000001");
 
-    private final SupervisorAgent supervisor;
+    private final InvestigationOrchestrator orchestrator;
     private final ObjectMapper mapper = new ObjectMapper();
     private final InvestigationSessionRepository sessions;
     private final WorkspaceRepository workspaces;
     private final AuditLogService auditLog;
 
-    public SessionResource(SupervisorAgent supervisor,
+    public SessionResource(InvestigationOrchestrator orchestrator,
                             InvestigationSessionRepository sessions,
                             WorkspaceRepository workspaces,
                             AuditLogService auditLog) {
-        this.supervisor = supervisor;
+        this.orchestrator = orchestrator;
         this.sessions = sessions;
         this.workspaces = workspaces;
         this.auditLog = auditLog;
@@ -73,7 +73,7 @@ public class SessionResource {
         String prompt = req.query() + focusHint + " Depth: " + req.depth();
 
         try {
-            String rawText = supervisor.investigate(prompt);
+            String rawText = orchestrator.investigate(prompt);
             String rawReport = extractJson(rawText);
             if (rawReport == null) {
                 log.warn("LLM did not return valid JSON for session {}", session.id);

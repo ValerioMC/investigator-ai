@@ -4,6 +4,7 @@ import ai.investigator.agents.corporate.CorporateAgent;
 import ai.investigator.agents.document.DocumentAgent;
 import ai.investigator.agents.financial.FinancialFlowAgent;
 import ai.investigator.agents.person.PersonProfileAgent;
+import ai.investigator.agents.supervisor.ReportFormatter;
 import ai.investigator.agents.supervisor.SupervisorAgent;
 import ai.investigator.agents.tools.CorporateAgentTool;
 import ai.investigator.agents.tools.DocumentAgentTool;
@@ -18,8 +19,6 @@ import ai.investigator.agents.observability.LangfuseObservabilityListener;
 import ai.investigator.agents.observability.LangfuseProperties;
 import ai.investigator.agents.verification.SourceVerificationAgent;
 import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.chat.listener.ChatModelListener;
-import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.service.AiServices;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -52,7 +51,10 @@ public class AgentConfiguration {
         return builder.build();
     }
 
-    // Supervisor needs valid JSON output every time — force JSON response format.
+    // Separate bean for the supervisor: same settings but used to distinguish
+    // supervisor traces from sub-agent traces in Langfuse.
+    // responseFormat=JSON intentionally absent — Ollama cannot do tool calls
+    // and JSON mode simultaneously (tool calls are handled by the delegate tools).
     @Bean
     public ChatModel supervisorChatModel(OllamaProperties props,
                                          Optional<LangfuseObservabilityListener> langfuse) {
@@ -63,23 +65,33 @@ public class AgentConfiguration {
             .think(false)
             .numCtx(props.getNumCtx())
             .numPredict(props.getNumPredict())
-            .timeout(Duration.ofSeconds(props.getTimeoutSeconds()))
-            .responseFormat(ResponseFormat.JSON);
+            .timeout(Duration.ofSeconds(props.getTimeoutSeconds()));
         langfuse.ifPresent(l -> builder.listeners(List.of(l)));
         return builder.build();
     }
 
+    // Supervisor: calls delegate tools that each invoke a sub-agent LLM.
+    // System prompt deliberately has no JSON template — the model is more likely
+    // to call tools when it has no pre-formed output structure to fill in directly.
+    // JSON formatting is handled separately by ReportFormatter after this call returns.
     @Bean
     public SupervisorAgent supervisorAgent(@Qualifier("supervisorChatModel") ChatModel supervisorChatModel,
                                            CorporateAgentTool corporateTool,
                                            PersonProfileAgentTool personTool,
                                            FinancialFlowAgentTool financialTool,
                                            DocumentAgentTool documentTool,
-                                           SourceVerificationAgentTool verificationTool,
-                                           GuardrailTool guardrailTool) {
+                                           SourceVerificationAgentTool verificationTool) {
         return AiServices.builder(SupervisorAgent.class)
             .chatModel(supervisorChatModel)
-            .tools(corporateTool, personTool, financialTool, documentTool, verificationTool, guardrailTool)
+            .tools(corporateTool, personTool, financialTool, documentTool, verificationTool)
+            .build();
+    }
+
+    // Formatter: no tools, pure JSON synthesis from supervisor's plain-text output.
+    @Bean
+    public ReportFormatter reportFormatter(@Qualifier("supervisorChatModel") ChatModel supervisorChatModel) {
+        return AiServices.builder(ReportFormatter.class)
+            .chatModel(supervisorChatModel)
             .build();
     }
 

@@ -1,6 +1,6 @@
 package ai.investigator.api.resource;
 
-import ai.investigator.agents.supervisor.SupervisorAgent;
+import ai.investigator.agents.supervisor.InvestigationOrchestrator;
 import ai.investigator.domain.report.EntityMap;
 import ai.investigator.domain.report.InvestigationReport;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,14 +17,14 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequestMapping("/api/v1")
 public class InvestigationResource {
 
-    private final SupervisorAgent supervisor;
+    private final InvestigationOrchestrator orchestrator;
     private final MeterRegistry metrics;
     private final ObjectMapper mapper = new ObjectMapper();
 
     private final AtomicLong investigationCount = new AtomicLong(0);
 
-    public InvestigationResource(SupervisorAgent supervisor, MeterRegistry metrics) {
-        this.supervisor = supervisor;
+    public InvestigationResource(InvestigationOrchestrator orchestrator, MeterRegistry metrics) {
+        this.orchestrator = orchestrator;
         this.metrics = metrics;
     }
 
@@ -40,7 +40,7 @@ public class InvestigationResource {
             String prompt = request.query() + focusHint +
                 " Investigation depth: " + request.depth() + " hops.";
 
-            String rawResponse = supervisor.investigate(prompt);
+            String rawResponse = orchestrator.investigate(prompt);
 
             InvestigationReport report = parseOrWrap(rawResponse, request.query());
 
@@ -62,11 +62,7 @@ public class InvestigationResource {
 
     private InvestigationReport parseOrWrap(String raw, String originalQuery) {
         try {
-            String json = raw.trim();
-            if (json.startsWith("```")) {
-                json = json.replaceAll("^```[a-z]*\n?", "").replaceAll("\n?```$", "").trim();
-            }
-            return mapper.readValue(json, InvestigationReport.class);
+            return mapper.readValue(extractJson(raw), InvestigationReport.class);
         } catch (Exception e) {
             return new InvestigationReport(
                 originalQuery,
@@ -77,6 +73,17 @@ public class InvestigationResource {
                 "This report is a journalistic aid. Claims require editorial verification before publication."
             );
         }
+    }
+
+    // Model may add preamble/postamble or markdown fences — find the outermost JSON object.
+    private String extractJson(String raw) {
+        String s = raw.trim();
+        if (s.startsWith("```")) {
+            s = s.replaceAll("(?s)^```[a-z]*\\s*", "").replaceAll("\\s*```$", "").trim();
+        }
+        int start = s.indexOf('{');
+        int end   = s.lastIndexOf('}');
+        return (start != -1 && end > start) ? s.substring(start, end + 1) : s;
     }
 
     public record InvestigationStats(long totalInvestigations, String asOf) {}
