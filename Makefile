@@ -85,10 +85,16 @@ up: check-ollama _gen-secrets
 	@echo "    Run 'make investigate' to execute the example investigation"
 	@echo ""
 
+# Bootstrap Langfuse (admin user + project + API keys) — idempotent
+seed-langfuse:
+	@bash scripts/seed-langfuse.sh
+
 # Seed Neo4j with the Ferretti corruption scenario
 seed:
 	@echo "==> Seeding data..."
 	@bash scripts/seed-data.sh
+	@echo "==> Bootstrapping Langfuse..."
+	@bash scripts/seed-langfuse.sh
 
 # Fire the pre-built investigation query
 investigate:

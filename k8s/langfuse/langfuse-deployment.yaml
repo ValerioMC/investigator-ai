@@ -35,6 +35,29 @@ spec:
                   key: LANGFUSE_SALT
             - name: TELEMETRY_ENABLED
               value: "false"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            # Auto-provision org/project/admin on first start so make up is ready to use
+            - name: LANGFUSE_INIT_ORG_NAME
+              value: "InvestigatorAI"
+            - name: LANGFUSE_INIT_PROJECT_NAME
+              value: "investigator-ai"
+            - name: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: investigator-secrets
+                  key: LANGFUSE_PUBLIC_KEY
+            - name: LANGFUSE_INIT_PROJECT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: investigator-secrets
+                  key: LANGFUSE_SECRET_KEY
+            - name: LANGFUSE_INIT_USER_EMAIL
+              value: "admin@investigator-ai.local"
+            - name: LANGFUSE_INIT_USER_PASSWORD
+              value: "investigator"
+            - name: LANGFUSE_INIT_USER_NAME
+              value: "Admin"
           resources:
             requests:
               cpu: 250m

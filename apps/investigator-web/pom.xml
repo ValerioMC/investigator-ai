@@ -48,28 +48,10 @@
       <artifactId>postgresql</artifactId>
     </dependency>
 
-    <!-- Flyway — pinned to cached version -->
+    <!-- Liquibase -->
     <dependency>
-      <groupId>org.flywaydb</groupId>
-      <artifactId>flyway-core</artifactId>
-      <version>11.3.4</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.dataformat</groupId>
-          <artifactId>jackson-dataformat-toml</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.flywaydb</groupId>
-      <artifactId>flyway-database-postgresql</artifactId>
-      <version>11.3.4</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.dataformat</groupId>
-          <artifactId>jackson-dataformat-toml</artifactId>
-        </exclusion>
-      </exclusions>
+      <groupId>org.liquibase</groupId>
+      <artifactId>liquibase-core</artifactId>
     </dependency>
 
     <!-- Test -->
