@@ -1,6 +1,5 @@
 package ai.investigator.agents.tools;
 
-import ai.investigator.agents.document.DocumentAgent;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import org.springframework.stereotype.Component;
@@ -8,18 +7,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class DocumentAgentTool {
 
-    private final DocumentAgent documentAgent;
+    private final VectorSearchTool vector;
 
-    public DocumentAgentTool(DocumentAgent documentAgent) {
-        this.documentAgent = documentAgent;
+    public DocumentAgentTool(VectorSearchTool vector) {
+        this.vector = vector;
     }
 
-    @Tool("Search and synthesize information from unstructured documents: news articles, " +
-          "court records, company filings, and leaked documents. " +
-          "Use to find documentary evidence supporting or contradicting a claim.")
+    @Tool("Semantic search across ingested documents: news articles, court records, company filings, " +
+          "and leaked documents. Returns matching text passages with source type and relevance score. " +
+          "Only returns documents that exist in the vector store — no synthesis or inference. " +
+          "Pass a person name, company name, or specific topic keyword.")
     public String searchDocuments(
-            @P("Query describing what documentary evidence to find, e.g. 'Court records mentioning Luigi Conti'")
-            String query) {
-        return documentAgent.searchAndSynthesize(query);
+            @P("Search term: a person name, company name, or specific topic, e.g. 'Luigi Conti court'") String query) {
+        return vector.searchDocuments(query);
     }
 }

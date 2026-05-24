@@ -215,9 +215,15 @@ _gen-secrets:
 
 _wait-infra:
 	@echo "==> Waiting for infrastructure pods"
-	$(KUBECTL) rollout status deployment/neo4j    --timeout=120s
-	$(KUBECTL) rollout status deployment/qdrant   --timeout=60s
-	$(KUBECTL) rollout status deployment/postgres --timeout=60s
+	$(KUBECTL) rollout status deployment/neo4j               --timeout=120s
+	$(KUBECTL) rollout status deployment/qdrant              --timeout=60s
+	$(KUBECTL) rollout status deployment/postgres            --timeout=60s
+	$(KUBECTL) rollout status deployment/langfuse-postgres   --timeout=60s
+	$(KUBECTL) rollout status deployment/langfuse-clickhouse --timeout=120s
+	$(KUBECTL) rollout status deployment/langfuse-redis      --timeout=60s
+	$(KUBECTL) rollout status deployment/langfuse-minio      --timeout=60s
+	$(KUBECTL) rollout status deployment/langfuse            --timeout=180s
+	$(KUBECTL) rollout status deployment/langfuse-worker     --timeout=120s
 
 _wait-app:
 	@echo "==> Waiting for application pods"

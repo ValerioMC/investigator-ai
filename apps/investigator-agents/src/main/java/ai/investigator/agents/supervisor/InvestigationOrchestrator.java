@@ -7,14 +7,10 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 /**
- * Thin coordinator: lets the SupervisorAgent LLM drive the investigation via tool calls,
- * then passes the plain-text findings to ReportFormatter for JSON synthesis.
- *
- * Two-step design for local LLMs (qwen3.6:35b and similar):
- *   Step 1 — SupervisorAgent has no JSON template in its prompt, so the model is forced
- *             to call delegate tools (CorporateAgentTool, PersonProfileAgentTool, etc.)
- *             rather than filling in a pre-formed output structure from training knowledge.
- *   Step 2 — ReportFormatter receives the raw findings and produces the final JSON.
+ * Two-step design:
+ *   Step 1 — SupervisorAgent is the only LLM. Tools call Neo4j/Qdrant directly with no
+ *             intermediate LLM hop. The model is constrained to report only what tools return.
+ *   Step 2 — ReportFormatter receives the plain-text findings and produces the final JSON.
  *             It has no tools, so it cannot hallucinate tool output.
  */
 @Service

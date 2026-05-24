@@ -71,7 +71,7 @@ public class Neo4jGraphRepository {
                     r.get("publicBody").asString(),
                     r.get("contract").asString(),
                     r.get("amount").asDouble(0.0),
-                    r.get("awardedAt").asLocalDate(),
+                    readLocalDate(r.get("awardedAt")),
                     r.get("company").asString()
                 ));
         }
@@ -162,7 +162,7 @@ public class Neo4jGraphRepository {
                 .list(r -> new ContractEntry(
                     r.get("title").asString(),
                     r.get("amount").asDouble(0.0),
-                    r.get("awardedAt").asLocalDate(),
+                    readLocalDate(r.get("awardedAt")),
                     r.get("issuedBy").asString()
                 ));
         }
@@ -181,7 +181,7 @@ public class Neo4jGraphRepository {
                 .list(r -> new DocumentRef(
                     r.get("title").asString(),
                     r.get("sourceType").asString(),
-                    r.get("publishedAt").isNull() ? null : r.get("publishedAt").asLocalDate(),
+                    readLocalDate(r.get("publishedAt")),
                     r.get("context").asString(""),
                     r.get("reliability").asString("UNVERIFIED")
                 ));
@@ -206,6 +206,19 @@ public class Neo4jGraphRepository {
                 else if (n.containsKey("name")) names.add(n.get("name").asString());
             });
             return new PathResult(hops, names);
+        }
+    }
+
+    // --- Helpers ---
+
+    // Neo4j stores dates as DATE type but legacy seed data may store them as strings.
+    private static LocalDate readLocalDate(org.neo4j.driver.Value v) {
+        if (v == null || v.isNull()) return null;
+        try {
+            return v.asLocalDate();
+        } catch (Exception e) {
+            var s = v.asString();
+            return s.isBlank() ? null : LocalDate.parse(s);
         }
     }
 

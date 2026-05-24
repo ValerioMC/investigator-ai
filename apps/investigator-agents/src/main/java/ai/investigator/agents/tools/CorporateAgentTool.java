@@ -1,6 +1,5 @@
 package ai.investigator.agents.tools;
 
-import ai.investigator.agents.corporate.CorporateAgent;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import org.springframework.stereotype.Component;
@@ -8,18 +7,19 @@ import org.springframework.stereotype.Component;
 @Component
 public class CorporateAgentTool {
 
-    private final CorporateAgent corporateAgent;
+    private final GraphTraversalTool graph;
 
-    public CorporateAgentTool(CorporateAgent corporateAgent) {
-        this.corporateAgent = corporateAgent;
+    public CorporateAgentTool(GraphTraversalTool graph) {
+        this.graph = graph;
     }
 
-    @Tool("Trace the ownership chain of a company, identify the Ultimate Beneficial Owner (UBO), " +
-          "detect shell companies, nominee directors, and tax haven registrations. " +
-          "Use for any query about who controls or owns a company.")
+    @Tool("Retrieve ownership chain, UBO, and public contracts for a company from the graph database. " +
+          "Returns only data present in the application database — no inference. " +
+          "Pass the exact legal company name as it appears in the registry.")
     public String analyzeCorporateOwnership(
-            @P("Investigative query about the company, e.g. 'Who controls Costruzioni Ferretti Srl?'")
-            String query) {
-        return corporateAgent.analyzeOwnership(query);
+            @P("Exact legal name of the company, e.g. 'Costruzioni Ferretti Srl'") String companyName) {
+        return graph.findOwnershipChain(companyName) + "\n\n" +
+               graph.findUBO(companyName) + "\n\n" +
+               graph.findContractsWonByCompany(companyName);
     }
 }

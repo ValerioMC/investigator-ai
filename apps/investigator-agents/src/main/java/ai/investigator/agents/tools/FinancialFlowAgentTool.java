@@ -1,6 +1,5 @@
 package ai.investigator.agents.tools;
 
-import ai.investigator.agents.financial.FinancialFlowAgent;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import org.springframework.stereotype.Component;
@@ -8,18 +7,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class FinancialFlowAgentTool {
 
-    private final FinancialFlowAgent financialFlowAgent;
+    private final GraphTraversalTool graph;
 
-    public FinancialFlowAgentTool(FinancialFlowAgent financialFlowAgent) {
-        this.financialFlowAgent = financialFlowAgent;
+    public FinancialFlowAgentTool(GraphTraversalTool graph) {
+        this.graph = graph;
     }
 
-    @Tool("Analyze a company's financial data for anomalies: unusual profit margins, " +
-          "suspicious dividend distributions, and revenue spikes correlated with public contract awards. " +
-          "Use when financial forensics are needed.")
+    @Tool("Retrieve public contract awards for a company from the graph database. " +
+          "Returns contract titles, amounts, and awarding bodies found in the application database. " +
+          "Balance sheet data is only available if financial records have been explicitly ingested. " +
+          "Pass the exact legal company name.")
     public String analyzeFinancials(
-            @P("Investigative query about the company's finances, e.g. 'Analyze Costruzioni Ferretti Srl financials 2022-2023'")
-            String query) {
-        return financialFlowAgent.analyzeFinancials(query);
+            @P("Exact legal name of the company, e.g. 'Costruzioni Ferretti Srl'") String companyName) {
+        return graph.findContractsWonByCompany(companyName);
     }
 }

@@ -1,6 +1,5 @@
 package ai.investigator.agents.tools;
 
-import ai.investigator.agents.verification.SourceVerificationAgent;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import org.springframework.stereotype.Component;
@@ -8,18 +7,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class SourceVerificationAgentTool {
 
-    private final SourceVerificationAgent sourceVerificationAgent;
+    private final VectorSearchTool vector;
 
-    public SourceVerificationAgentTool(SourceVerificationAgent sourceVerificationAgent) {
-        this.sourceVerificationAgent = sourceVerificationAgent;
+    public SourceVerificationAgentTool(VectorSearchTool vector) {
+        this.vector = vector;
     }
 
-    @Tool("Cross-reference a specific claim against all available sources (graph + documents) " +
-          "and assign a confidence level: HIGH, MEDIUM, LOW, or UNVERIFIED. " +
-          "Call this for each key finding before including it in the final report.")
+    @Tool("Search the document corpus for evidence supporting or contradicting a specific finding. " +
+          "Returns raw matching passages — you assign the confidence level based on what is returned. " +
+          "HIGH = multiple independent official sources. MEDIUM = one credible source. " +
+          "LOW = single low-reliability source. UNVERIFIED = nothing found.")
     public String verifyClaim(
-            @P("The specific claim to verify, e.g. 'Luigi Conti voted on contracts awarding €1.2M to a company his brother owns'")
-            String claim) {
-        return sourceVerificationAgent.verifyClaim(claim);
+            @P("The claim text to find corroborating or contradicting documents for") String claim) {
+        return vector.searchDocuments(claim);
     }
 }

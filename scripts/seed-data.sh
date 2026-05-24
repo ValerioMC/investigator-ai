@@ -95,14 +95,14 @@ SET pb.name   = 'Comune di Brescia',
 MERGE (k:Contract {id: 'k-001'})
 SET k.title          = 'Riqualificazione Piazza Loggia — Fase II',
     k.amount         = 1200000,
-    k.awardedAt      = '2022-04-15',
+    k.awardedAt      = date('2022-04-15'),
     k.publicBodyName = 'Comune di Brescia',
     k.suspicionScore = 0.88;
 
 MERGE (k:Contract {id: 'k-002'})
 SET k.title          = 'Manutenzione straordinaria rete stradale urbana',
     k.amount         = 450000,
-    k.awardedAt      = '2023-01-20',
+    k.awardedAt      = date('2023-01-20'),
     k.publicBodyName = 'Comune di Brescia',
     k.suspicionScore = 0.71;
 "
