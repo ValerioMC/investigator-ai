@@ -201,4 +201,3 @@ curl -s -X POST http://localhost:8080/api/v1/investigate \
 | `investigator-api` | `POST /api/v1/investigate` entry point |
 | `investigator-web` | Vue 3 SPA + REST backend (sessions, entities, graph, history) |
 
-Full architecture, graph schema, and coding conventions: [CLAUDE.md](CLAUDE.md)
