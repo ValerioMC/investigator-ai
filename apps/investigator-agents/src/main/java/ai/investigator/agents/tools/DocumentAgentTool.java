@@ -2,10 +2,14 @@ package ai.investigator.agents.tools;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class DocumentAgentTool {
+
+    private static final Logger log = LoggerFactory.getLogger(DocumentAgentTool.class);
 
     private final VectorSearchTool vector;
 
@@ -13,12 +17,15 @@ public class DocumentAgentTool {
         this.vector = vector;
     }
 
-    @Tool("Semantic search across ingested documents: news articles, court records, company filings, " +
-          "and leaked documents. Returns matching text passages with source type and relevance score. " +
-          "Only returns documents that exist in the vector store — no synthesis or inference. " +
-          "Pass a person name, company name, or specific topic keyword.")
+    @Tool("Search and synthesize information from unstructured documents: news articles, " +
+          "court records, company filings, and leaked documents. " +
+          "Use to find documentary evidence supporting or contradicting a claim.")
     public String searchDocuments(
-            @P("Search term: a person name, company name, or specific topic, e.g. 'Luigi Conti court'") String query) {
-        return vector.searchDocuments(query);
+            @P("Query describing what documentary evidence to find, e.g. 'Court records mentioning Luigi Conti'")
+            String query) {
+        log.warn("[DOCUMENT-TOOL] called for: {}", query);
+        String result = vector.searchDocuments(query);
+        log.warn("[DOCUMENT-TOOL] result: {}", result);
+        return result;
     }
 }

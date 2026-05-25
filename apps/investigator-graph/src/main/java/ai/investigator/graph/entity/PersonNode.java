@@ -1,5 +1,6 @@
 package ai.investigator.graph.entity;
 
+import org.neo4j.driver.Value;
 import org.neo4j.driver.types.Node;
 
 import java.time.LocalDate;
@@ -19,7 +20,7 @@ public record PersonNode(
             node.get("id").asString(),
             node.get("fullName").asString(),
             node.containsKey("birthDate") && !node.get("birthDate").isNull()
-                ? node.get("birthDate").asLocalDate() : null,
+                ? parseDate(node.get("birthDate")) : null,
             node.containsKey("nationality") && !node.get("nationality").isNull()
                 ? node.get("nationality").asString() : null,
             node.containsKey("taxCode") && !node.get("taxCode").isNull()
@@ -29,5 +30,14 @@ public record PersonNode(
             node.containsKey("riskScore") && !node.get("riskScore").isNull()
                 ? node.get("riskScore").asDouble() : null
         );
+    }
+
+    private static LocalDate parseDate(Value v) {
+        try {
+            return v.asLocalDate();
+        } catch (Exception e) {
+            String s = v.asString();
+            return s.isBlank() ? null : LocalDate.parse(s);
+        }
     }
 }

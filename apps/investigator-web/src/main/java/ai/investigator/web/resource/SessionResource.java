@@ -68,12 +68,8 @@ public class SessionResource {
             "SESSION", session.id.toString(), null);
 
         // LLM call outside transaction
-        String focusHint = req.focusEntities().isEmpty() ? "" :
-            " Focus on: " + String.join(", ", req.focusEntities()) + ".";
-        String prompt = req.query() + focusHint + " Depth: " + req.depth();
-
         try {
-            String rawText = orchestrator.investigate(prompt);
+            String rawText = orchestrator.investigate(req.query(), req.focusEntities());
             String rawReport = extractJson(rawText);
             if (rawReport == null) {
                 log.warn("LLM did not return valid JSON for session {}", session.id);

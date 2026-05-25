@@ -21,12 +21,18 @@ public final class GraphQueries {
         RETURN DISTINCT c, j
         """;
 
+    // Finds both direct owners and persons who own a holding company that controls the target.
     public static final String FIND_OWNERSHIP_CHAIN =
         """
-        MATCH path = (p:Person)-[r:OWNS]->(c:Company {name: $companyName})
+        MATCH (p:Person)-[r:OWNS]->(c:Company {name: $companyName})
         RETURN p.fullName AS owner, r.sharePercent AS share,
-               r.directOrIndirect AS ownershipType, p.nationality AS nationality
-        ORDER BY r.sharePercent DESC
+               coalesce(r.directOrIndirect, 'DIRECT') AS ownershipType, p.nationality AS nationality
+        UNION
+        MATCH (holding:Company)-[:CONTROLS]->(c:Company {name: $companyName})
+        MATCH (p:Person)-[r:OWNS]->(holding)
+        RETURN p.fullName AS owner, r.sharePercent AS share,
+               'INDIRECT via ' + holding.name AS ownershipType, p.nationality AS nationality
+        ORDER BY share DESC
         """;
 
     public static final String FIND_COMPANY_CONTROLLERS =
@@ -47,11 +53,15 @@ public final class GraphQueries {
                co.name AS company
         """;
 
+    // Detects direct conflict (person owns/directs the company) AND family-proxy conflict
+    // (family member owns the company or a holding that controls it).
     public static final String DETECT_CONFLICT_FOR_PERSON =
         """
         MATCH (p:Person {fullName: $personName})-[:HELD_PUBLIC_ROLE]->(pb:PublicBody)
               -[:ISSUED]->(ct:Contract)-[:AWARDED_TO]->(co:Company)
         WHERE (p)-[:OWNS|IS_DIRECTOR_OF]->(co)
+           OR (p)-[:FAMILY_RELATION]-(:Person)-[:OWNS|IS_DIRECTOR_OF]->(co)
+           OR (p)-[:FAMILY_RELATION]-(:Person)-[:OWNS]->(:Company)-[:CONTROLS]->(co)
         RETURN pb.name AS publicBody, ct.title AS contract,
                ct.amount AS amount, co.name AS company
         """;

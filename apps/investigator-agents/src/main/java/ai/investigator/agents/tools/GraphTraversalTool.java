@@ -63,15 +63,19 @@ public class GraphTraversalTool {
             var persons = graph.findUBO(companyName);
             metrics.counter("graph.tool.calls", "tool", "findUBO").increment();
             if (persons.isEmpty()) {
-                return "No UBO found for " + companyName + " — ownership chain may be opaque.";
+                String r = "No UBO found for " + companyName + " — ownership chain may be opaque.";
+                log.warn("[TOOL] findUBO({}) → {}", companyName, r);
+                return r;
             }
-            return "ULTIMATE BENEFICIAL OWNERS of " + companyName + ":\n" +
+            String result = "ULTIMATE BENEFICIAL OWNERS of " + companyName + ":\n" +
                 persons.stream()
                     .map(p -> "- " + p.fullName() +
                         (p.nationality() != null ? " (" + p.nationality() + ")" : "") +
                         (p.politicalRole() != null ? " [PUBLIC ROLE: " + p.politicalRole() + "]" : "") +
                         (p.riskScore() != null && p.riskScore() > 0.6 ? " [HIGH RISK]" : ""))
                     .collect(Collectors.joining("\n"));
+            log.warn("[TOOL] findUBO({}) → {}", companyName, result);
+            return result;
         } finally {
             timer.stop(metrics.timer("graph.tool.latency", "tool", "findUBO"));
         }
@@ -86,7 +90,9 @@ public class GraphTraversalTool {
             var entries = graph.findOwnershipChain(companyName);
             metrics.counter("graph.tool.calls", "tool", "findOwnershipChain").increment();
             if (entries.isEmpty()) {
-                return "No ownership data found for " + companyName;
+                String r = "No ownership data found for " + companyName;
+                log.warn("[TOOL] findOwnershipChain({}) → {}", companyName, r);
+                return r;
             }
             StringBuilder sb = new StringBuilder("OWNERSHIP CHAIN for ").append(companyName).append(":\n");
             double knownShares = 0;
@@ -102,6 +108,7 @@ public class GraphTraversalTool {
                 sb.append("- Remaining ").append(String.format("%.1f%%", unknown))
                     .append(": unknown / bearer shares\n");
             }
+            log.warn("[TOOL] findOwnershipChain({}) → {}", companyName, sb);
             return sb.toString();
         } finally {
             timer.stop(metrics.timer("graph.tool.latency", "tool", "findOwnershipChain"));
@@ -110,7 +117,7 @@ public class GraphTraversalTool {
 
     @Tool("Detect potential conflicts of interest: find persons who held a public role at a " +
           "body that issued contracts, and also owned or directed companies that won those " +
-          "contracts. Provide date range as ISO-8601 (e.g. 2018-01-01).")
+          "contracts (or whose family members did). Provide date range as ISO-8601.")
     public String detectConflictOfInterest(
             @P("Full name of person to check, or null to scan all") String personName,
             @P("Start date ISO-8601 e.g. 2018-01-01, or null") String dateFrom,
@@ -125,15 +132,18 @@ public class GraphTraversalTool {
                 conflicts = graph.detectConflictsOfInterest(dateFrom, dateTo);
             }
             if (conflicts.isEmpty()) {
-                return "No conflicts of interest detected" +
-                    (personName != null ? " for " + personName : "") + ".";
+                String r = "No conflicts of interest detected" + (personName != null ? " for " + personName : "") + ".";
+                log.warn("[TOOL] detectConflictOfInterest({}) → {}", personName, r);
+                return r;
             }
-            return "CONFLICTS OF INTEREST DETECTED:\n" +
+            String result = "CONFLICTS OF INTEREST DETECTED:\n" +
                 conflicts.stream().map(c ->
                     "- " + c.person() + " held role at [" + c.publicBody() + "] " +
                     "while their company [" + c.company() + "] won contract: " +
                     c.contract() + " (€" + String.format("%,.0f", c.amount()) + ")"
                 ).collect(Collectors.joining("\n"));
+            log.warn("[TOOL] detectConflictOfInterest({}) → {}", personName, result);
+            return result;
         } finally {
             timer.stop(metrics.timer("graph.tool.latency", "tool", "detectConflictOfInterest"));
         }

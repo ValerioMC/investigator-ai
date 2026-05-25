@@ -3,6 +3,7 @@ package ai.investigator.agents.observability;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -33,11 +34,9 @@ public class LangfuseObservabilityListener implements ChatModelListener {
 
     private static final Logger log = LoggerFactory.getLogger(LangfuseObservabilityListener.class);
 
-    private static final String TRACE_ID   = "lf.traceId";
-    private static final String GEN_ID     = "lf.genId";
-    private static final String START_KEY  = "lf.startTime";
-    private static final String IS_CHILD   = "lf.isChild";
-    private static final String TRACE_CTX  = "lf.traceCtx";  // captured on request thread, used in virtual thread
+    private static final String TRACE_ID  = "lf.traceId";
+    private static final String GEN_ID    = "lf.genId";
+    private static final String START_KEY = "lf.startTime";
 
     private final String ingestionUrl;
     private final String authHeader;
@@ -57,19 +56,7 @@ public class LangfuseObservabilityListener implements ChatModelListener {
 
     @Override
     public void onRequest(ChatModelRequestContext ctx) {
-        var traceCtx = TraceContext.get();
-        if (traceCtx != null) {
-            // nested call inside an orchestrated investigation — use the shared trace ID.
-            // Store the context reference now (on the calling thread) because virtual threads
-            // created later in onResponse do not inherit ThreadLocal values.
-            ctx.attributes().put(TRACE_ID,  traceCtx.traceId());
-            ctx.attributes().put(IS_CHILD,  true);
-            ctx.attributes().put(TRACE_CTX, traceCtx);
-        } else {
-            // standalone call — own trace
-            ctx.attributes().put(TRACE_ID,  UUID.randomUUID().toString());
-            ctx.attributes().put(IS_CHILD,  false);
-        }
+        ctx.attributes().put(TRACE_ID,  UUID.randomUUID().toString());
         ctx.attributes().put(GEN_ID,    UUID.randomUUID().toString());
         ctx.attributes().put(START_KEY, Instant.now());
     }
@@ -79,7 +66,6 @@ public class LangfuseObservabilityListener implements ChatModelListener {
         var traceId   = (String)  ctx.attributes().get(TRACE_ID);
         var genId     = (String)  ctx.attributes().get(GEN_ID);
         var startTime = (Instant) ctx.attributes().get(START_KEY);
-        var isChild   = Boolean.TRUE.equals(ctx.attributes().get(IS_CHILD));
         if (traceId == null) return;
 
         var req     = ctx.chatRequest();
@@ -90,22 +76,28 @@ public class LangfuseObservabilityListener implements ChatModelListener {
             try {
                 var agentName = resolveAgentName(req.messages());
                 var userInput = extractUserInput(req.messages());
-                // text() is null when the model emits a tool call instead of a text response
-                var output    = resp.aiMessage() != null && resp.aiMessage().text() != null
-                                ? resp.aiMessage().text() : "";
+                var output    = resp.aiMessage() != null ? resp.aiMessage().text() : "";
                 var usage     = resp.tokenUsage();
                 var model     = resp.modelName() != null ? resp.modelName()
                                 : req.modelName() != null ? req.modelName() : "ollama";
 
+                var traceBody = map(
+                        "id", traceId,
+                        "name", "investigator-ai",
+                        "timestamp", startTime.toString(),
+                        "input", userInput,
+                        "tags", List.of("investigator-ai", agentName)
+                );
+
                 var genBody = new LinkedHashMap<String, Object>();
-                genBody.put("id",        genId);
-                genBody.put("traceId",   traceId);
-                genBody.put("name",      agentName);
+                genBody.put("id", genId);
+                genBody.put("traceId", traceId);
+                genBody.put("name", agentName);
                 genBody.put("startTime", startTime.toString());
-                genBody.put("endTime",   endTime.toString());
-                genBody.put("model",     model);
-                genBody.put("input",     messagesAsJson(req.messages()));
-                genBody.put("output",    Map.of("role", "assistant", "content", output));
+                genBody.put("endTime", endTime.toString());
+                genBody.put("model", model);
+                genBody.put("input", messagesAsJson(req.messages()));
+                genBody.put("output", Map.of("role", "assistant", "content", output));
                 if (usage != null) {
                     genBody.put("usage", map(
                             "input",  usage.inputTokenCount(),
@@ -114,44 +106,12 @@ public class LangfuseObservabilityListener implements ChatModelListener {
                     ));
                 }
 
-                List<Object> events;
-                if (isChild) {
-                    // first child call for this trace: also create the trace record.
-                    // Use the reference stored in onRequest — TraceContext ThreadLocal is
-                    // not visible here because virtual threads don't inherit ThreadLocals.
-                    var traceCtx = (TraceContext.Context) ctx.attributes().get(TRACE_CTX);
-                    if (traceCtx != null && traceCtx.traceCreated().compareAndSet(false, true)) {
-                        var traceBody = map(
-                                "id",        traceId,
-                                "name",      "investigator-ai",
-                                "timestamp", startTime.toString(),
-                                "input",     traceCtx.query(),
-                                "tags",      List.of("investigator-ai")
-                        );
-                        events = List.of(
-                                event("trace-create",      traceId, startTime, traceBody),
-                                event("generation-create", genId,   startTime, genBody)
-                        );
-                    } else {
-                        events = List.of(event("generation-create", genId, startTime, genBody));
-                    }
-                } else {
-                    // standalone call: own trace
-                    var traceBody = map(
-                            "id",        traceId,
-                            "name",      "investigator-ai",
-                            "timestamp", startTime.toString(),
-                            "input",     userInput,
-                            "output",    output,
-                            "tags",      List.of("investigator-ai", agentName)
-                    );
-                    events = List.of(
-                            event("trace-create",      traceId, startTime, traceBody),
-                            event("generation-create", genId,   startTime, genBody)
-                    );
-                }
+                var batch = Map.of("batch", List.of(
+                        event("trace-create",      traceId, startTime, traceBody),
+                        event("generation-create", genId,   startTime, genBody)
+                ));
 
-                post(Map.of("batch", events));
+                post(batch);
             } catch (Exception e) {
                 log.warn("Langfuse ingestion failed [{}]: {}", e.getClass().getSimpleName(), e.getMessage(), e);
             }
@@ -167,7 +127,7 @@ public class LangfuseObservabilityListener implements ChatModelListener {
                 post(Map.of("batch", List.of(event("trace-create", traceId, Instant.now(),
                         map("id", traceId, "name", "investigator-ai",
                             "level", "ERROR",
-                            "statusMessage", ctx.error().getMessage())))));
+                            "statusMessage", ctx.error().getMessage())))));  // NOSONAR: fire-and-forget
             } catch (Exception e) {
                 log.warn("Langfuse error trace failed: {}", e.getMessage());
             }
@@ -180,13 +140,12 @@ public class LangfuseObservabilityListener implements ChatModelListener {
         return SystemMessage.findFirst(messages)
                 .map(sm -> {
                     var text = sm.text();
-                    if (text.contains("corporate intelligence"))               return "CorporateAgent";
-                    if (text.contains("person intelligence"))                  return "PersonProfileAgent";
-                    if (text.contains("financial forensics"))                  return "FinancialFlowAgent";
-                    if (text.contains("document intelligence"))                return "DocumentAgent";
-                    if (text.contains("source verification"))                  return "SourceVerificationAgent";
-                    if (text.contains("investigative journalism supervisor"))   return "SupervisorAgent";
-                    if (text.contains("report formatter"))                     return "ReportFormatter";
+                    if (text.contains("corporate intelligence"))          return "CorporateAgent";
+                    if (text.contains("person intelligence"))             return "PersonProfileAgent";
+                    if (text.contains("financial forensics"))             return "FinancialFlowAgent";
+                    if (text.contains("document intelligence"))           return "DocumentAgent";
+                    if (text.contains("source verification"))             return "SourceVerificationAgent";
+                    if (text.contains("investigative journalism supervisor")) return "SupervisorAgent";
                     return "UnknownAgent";
                 })
                 .orElse("LLMCall");
@@ -206,11 +165,11 @@ public class LangfuseObservabilityListener implements ChatModelListener {
 
     private String textOf(ChatMessage m) {
         return switch (m) {
-            case SystemMessage sm              -> sm.text();
-            case UserMessage um                -> um.hasSingleText() ? um.singleText() : um.toString();
-            case AiMessage am                  -> am.text() != null ? am.text() : "";
-            case ToolExecutionResultMessage tr -> tr.text() != null ? tr.text() : "";
-            default                            -> "";
+            case SystemMessage sm               -> sm.text();
+            case UserMessage um                 -> um.hasSingleText() ? um.singleText() : um.toString();
+            case AiMessage am                   -> am.text() != null ? am.text() : "";
+            case ToolExecutionResultMessage tr  -> tr.text() != null ? tr.text() : "";
+            default                             -> "";
         };
     }
 

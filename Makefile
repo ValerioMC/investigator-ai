@@ -105,14 +105,14 @@ investigate:
 	  -d '{ \
 	    "query": "Chi controlla realmente Costruzioni Ferretti Srl e ci sono conflitti di interesse con l'\''ex sindaco Luigi Conti nell'\''aggiudicazione degli appalti pubblici del Comune di Brescia nel periodo 2022-2023?", \
 	    "depth": 4, \
-	    "focusEntities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"] \
+	    "focus_entities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"] \
 	  }' | python3 -m json.tool 2>/dev/null || \
 	curl -s -X POST $(API_URL)/api/v1/investigate \
 	  -H "Content-Type: application/json" \
 	  -d '{ \
 	    "query": "Chi controlla realmente Costruzioni Ferretti Srl e ci sono conflitti di interesse con l'\''ex sindaco Luigi Conti nell'\''aggiudicazione degli appalti pubblici del Comune di Brescia nel periodo 2022-2023?", \
 	    "depth": 4, \
-	    "focusEntities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"] \
+	    "focus_entities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"] \
 	  }'
 	@echo ""
 
