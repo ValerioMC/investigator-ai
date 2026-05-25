@@ -196,16 +196,61 @@ public class Neo4jGraphRepository {
         try (Session session = driver.session()) {
             var result = session.run(GraphQueries.SHORTEST_PATH,
                 Map.of("person1", person1, "person2", person2));
-            if (!result.hasNext()) return null;
-            Record r = result.next();
-            int hops = r.get("hops").asInt();
-            var path = r.get("path").asPath();
-            var names = new java.util.ArrayList<String>();
-            path.nodes().forEach(n -> {
-                if (n.containsKey("fullName")) names.add(n.get("fullName").asString());
-                else if (n.containsKey("name")) names.add(n.get("name").asString());
-            });
-            return new PathResult(hops, names);
+            return readPath(result);
+        }
+    }
+
+    public PathResult personToCompanyPath(String personName, String companyName) {
+        try (Session session = driver.session()) {
+            var result = session.run(GraphQueries.PERSON_COMPANY_PATH,
+                Map.of("personName", personName, "companyName", companyName));
+            return readPath(result);
+        }
+    }
+
+    private static PathResult readPath(org.neo4j.driver.Result result) {
+        if (!result.hasNext()) return null;
+        Record r = result.next();
+        int hops = r.get("hops").asInt();
+        var path = r.get("path").asPath();
+        var names = new java.util.ArrayList<String>();
+        path.nodes().forEach(n -> {
+            if (n.containsKey("fullName")) names.add(n.get("fullName").asString());
+            else if (n.containsKey("name")) names.add(n.get("name").asString());
+            else if (n.containsKey("title")) names.add(n.get("title").asString());
+            else names.add(n.labels().iterator().next());
+        });
+        return new PathResult(hops, names);
+    }
+
+    // --- Catalog ---
+
+    public List<String> listAllPersonNames() {
+        try (Session session = driver.session()) {
+            return session.run(GraphQueries.LIST_ALL_PERSON_NAMES)
+                .list(r -> r.get("name").asString());
+        }
+    }
+
+    public List<String> listAllCompanyNames() {
+        try (Session session = driver.session()) {
+            return session.run(GraphQueries.LIST_ALL_COMPANY_NAMES)
+                .list(r -> r.get("name").asString());
+        }
+    }
+
+    public List<ConflictEntry> detectConflictsInRange(String from, String to) {
+        try (Session session = driver.session()) {
+            return session.run(GraphQueries.DETECT_CONFLICTS_IN_RANGE,
+                    Map.of("from", from, "to", to))
+                .list(r -> new ConflictEntry(
+                    r.get("person").asString(),
+                    r.get("publicBody").asString(),
+                    r.get("contract").asString(),
+                    r.get("amount").asDouble(0.0),
+                    readLocalDate(r.get("awardedAt")),
+                    r.get("company").asString()
+                ));
         }
     }
 

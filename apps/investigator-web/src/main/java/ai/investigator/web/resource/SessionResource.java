@@ -1,5 +1,6 @@
 package ai.investigator.web.resource;
 
+import ai.investigator.agents.observability.LangfuseTraceContext;
 import ai.investigator.agents.supervisor.InvestigationOrchestrator;
 import ai.investigator.web.dto.SessionDto;
 import ai.investigator.web.entity.InvestigationSession;
@@ -67,7 +68,10 @@ public class SessionResource {
         auditLog.log(DEFAULT_WORKSPACE, null, "INVESTIGATION_STARTED",
             "SESSION", session.id.toString(), null);
 
-        // LLM call outside transaction
+        // LLM call outside transaction. Bind the Langfuse session/user id
+        // so every sub-trace generated downstream is grouped under this session.
+        LangfuseTraceContext.setSession(session.id.toString());
+        LangfuseTraceContext.setUser(DEFAULT_WORKSPACE.toString());
         try {
             String rawText = orchestrator.investigate(req.query(), req.focusEntities());
             String rawReport = extractJson(rawText);
@@ -87,6 +91,8 @@ public class SessionResource {
             auditLog.log(DEFAULT_WORKSPACE, null, "INVESTIGATION_FAILED",
                 "SESSION", session.id.toString(),
                 "{\"error\":\"" + errMsg.replace("\"", "'") + "\"}");
+        } finally {
+            LangfuseTraceContext.clear();
         }
 
         return ResponseEntity.status(201).body(SessionDto.Detail.from(session));

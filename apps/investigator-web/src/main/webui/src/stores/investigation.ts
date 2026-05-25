@@ -19,18 +19,19 @@ export const useInvestigationStore = defineStore('investigation', () => {
     result.value = null
 
     try {
+      // investigator-web uses SNAKE_CASE Jackson strategy → send focus_entities
       const response = await axios.post('/api/web/v1/sessions', {
         query: query.value,
         depth: depth.value,
-        focusEntities: focusEntities.value,
+        focus_entities: focusEntities.value,
       })
-      // SessionResource returns a session; extract the report field
       const session = response.data
       if (session.report) {
         try {
-          result.value = typeof session.report === 'string'
+          const raw = typeof session.report === 'string'
             ? JSON.parse(session.report)
             : session.report
+          result.value = normalizeReport(raw, query.value)
         } catch {
           result.value = {
             query: query.value,
@@ -42,12 +43,29 @@ export const useInvestigationStore = defineStore('investigation', () => {
           }
         }
       } else if (session.status === 'FAILED') {
-        error.value = session.errorMessage ?? 'Investigation failed'
+        error.value = session.error_message ?? session.errorMessage ?? 'Investigation failed'
       }
     } catch (err: any) {
       error.value = err?.response?.data?.message ?? err?.message ?? 'Request failed'
     } finally {
       loading.value = false
+    }
+  }
+
+  // LLM outputs snake_case keys; normalize to camelCase for the frontend types
+  function normalizeReport(raw: any, fallbackQuery: string): InvestigationReport {
+    return {
+      query: raw.query || fallbackQuery,
+      summary: raw.summary || '',
+      findings: (raw.findings || []).map((f: any) => ({
+        claim: f.claim || '',
+        confidence: f.confidence || 'UNVERIFIED',
+        evidence: f.evidence || [],
+        agentSource: f.agent_source || f.agentSource || '',
+      })),
+      entityMap: raw.entity_map || raw.entityMap || { persons: [], companies: [], contracts: [] },
+      recommendedFollowUps: raw.recommended_follow_ups || raw.recommendedFollowUps || [],
+      disclaimer: raw.disclaimer || 'This report is a journalistic aid. Claims require editorial verification before publication.',
     }
   }
 

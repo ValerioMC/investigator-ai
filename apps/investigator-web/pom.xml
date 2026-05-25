@@ -25,6 +25,10 @@
     </dependency>
     <dependency>
       <groupId>ai.investigator</groupId>
+      <artifactId>investigator-vector</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>ai.investigator</groupId>
       <artifactId>investigator-agents</artifactId>
     </dependency>
 

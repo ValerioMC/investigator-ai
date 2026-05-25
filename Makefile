@@ -91,8 +91,13 @@ seed-langfuse:
 
 # Seed Neo4j with the Ferretti corruption scenario
 seed:
-	@echo "==> Seeding data..."
+	@echo "==> Seeding graph..."
 	@bash scripts/seed-data.sh
+	@echo "==> Seeding vector documents..."
+	@curl -fsS -X POST $(WEB_URL)/api/web/v1/admin/seed-documents \
+	  -H "Content-Type: application/json" || \
+	  echo "(skipped — investigator-web not reachable on $(WEB_URL); start it and re-run 'curl -X POST $(WEB_URL)/api/web/v1/admin/seed-documents')"
+	@echo ""
 	@echo "==> Bootstrapping Langfuse..."
 	@bash scripts/seed-langfuse.sh
 

@@ -1,5 +1,6 @@
 package ai.investigator.api.resource;
 
+import ai.investigator.agents.observability.LangfuseTraceContext;
 import ai.investigator.agents.supervisor.InvestigationOrchestrator;
 import ai.investigator.domain.report.EntityMap;
 import ai.investigator.domain.report.InvestigationReport;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
@@ -39,6 +41,9 @@ public class InvestigationResource {
         investigationCount.incrementAndGet();
         metrics.counter("investigations.total").increment();
 
+        // Each /investigate call is its own Langfuse session — without this the
+        // Sessions tab in Langfuse stays empty.
+        LangfuseTraceContext.setSession(UUID.randomUUID().toString());
         try {
             String rawResponse = orchestrator.investigate(request.query(), request.focusEntities());
 
@@ -52,6 +57,8 @@ public class InvestigationResource {
             metrics.counter("investigations.errors").increment();
             timer.stop(metrics.timer("investigations.latency"));
             throw e;
+        } finally {
+            LangfuseTraceContext.clear();
         }
     }
 

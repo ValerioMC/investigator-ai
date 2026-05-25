@@ -122,6 +122,48 @@ public final class GraphQueries {
         ORDER BY d.publishedAt DESC
         """;
 
+    // --- Catalog lookups (used by orchestrator for entity auto-resolution) ---
+
+    public static final String LIST_ALL_PERSON_NAMES =
+        """
+        MATCH (p:Person)
+        WHERE p.fullName IS NOT NULL
+        RETURN p.fullName AS name
+        """;
+
+    public static final String LIST_ALL_COMPANY_NAMES =
+        """
+        MATCH (c:Company)
+        WHERE c.name IS NOT NULL
+        RETURN c.name AS name
+        """;
+
+    // Conflicts of interest filtered to a date window, including family + control chains.
+    public static final String DETECT_CONFLICTS_IN_RANGE =
+        """
+        MATCH (p:Person)-[:HELD_PUBLIC_ROLE]->(pb:PublicBody)
+              -[:ISSUED]->(ct:Contract)-[:AWARDED_TO]->(co:Company)
+        WHERE ct.awardedAt >= date($from) AND ct.awardedAt <= date($to)
+          AND (
+            (p)-[:OWNS|IS_DIRECTOR_OF]->(co)
+            OR (p)-[:FAMILY_RELATION]-(:Person)-[:OWNS|IS_DIRECTOR_OF]->(co)
+            OR (p)-[:FAMILY_RELATION]-(:Person)-[:OWNS]->(:Company)-[:CONTROLS]->(co)
+          )
+        RETURN p.fullName AS person, pb.name AS publicBody,
+               ct.title AS contract, ct.amount AS amount, ct.awardedAt AS awardedAt,
+               co.name AS company
+        ORDER BY ct.awardedAt
+        """;
+
+    // Shortest path between a Person and a Company (any relationship, up to 6 hops).
+    public static final String PERSON_COMPANY_PATH =
+        """
+        MATCH path = shortestPath(
+          (a:Person {fullName: $personName})-[*..6]-(b:Company {name: $companyName})
+        )
+        RETURN path, length(path) AS hops
+        """;
+
     // --- Contract queries ---
 
     public static final String FIND_CONTRACTS_WON_BY_COMPANY =

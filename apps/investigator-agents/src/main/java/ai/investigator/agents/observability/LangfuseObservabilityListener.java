@@ -34,9 +34,11 @@ public class LangfuseObservabilityListener implements ChatModelListener {
 
     private static final Logger log = LoggerFactory.getLogger(LangfuseObservabilityListener.class);
 
-    private static final String TRACE_ID  = "lf.traceId";
-    private static final String GEN_ID    = "lf.genId";
-    private static final String START_KEY = "lf.startTime";
+    private static final String TRACE_ID   = "lf.traceId";
+    private static final String GEN_ID     = "lf.genId";
+    private static final String START_KEY  = "lf.startTime";
+    private static final String SESSION_ID = "lf.sessionId";
+    private static final String USER_ID    = "lf.userId";
 
     private final String ingestionUrl;
     private final String authHeader;
@@ -59,6 +61,12 @@ public class LangfuseObservabilityListener implements ChatModelListener {
         ctx.attributes().put(TRACE_ID,  UUID.randomUUID().toString());
         ctx.attributes().put(GEN_ID,    UUID.randomUUID().toString());
         ctx.attributes().put(START_KEY, Instant.now());
+        // Capture the session/user from the per-thread context at request time,
+        // since onResponse runs on a virtual thread that may not inherit it.
+        var sid = LangfuseTraceContext.session();
+        if (sid != null) ctx.attributes().put(SESSION_ID, sid);
+        var uid = LangfuseTraceContext.user();
+        if (uid != null) ctx.attributes().put(USER_ID, uid);
     }
 
     @Override
@@ -81,13 +89,18 @@ public class LangfuseObservabilityListener implements ChatModelListener {
                 var model     = resp.modelName() != null ? resp.modelName()
                                 : req.modelName() != null ? req.modelName() : "ollama";
 
-                var traceBody = map(
-                        "id", traceId,
-                        "name", "investigator-ai",
-                        "timestamp", startTime.toString(),
-                        "input", userInput,
-                        "tags", List.of("investigator-ai", agentName)
-                );
+                var sessionId = (String) ctx.attributes().get(SESSION_ID);
+                var userId    = (String) ctx.attributes().get(USER_ID);
+
+                var traceBody = new LinkedHashMap<String, Object>();
+                traceBody.put("id", traceId);
+                traceBody.put("name", agentName);
+                traceBody.put("timestamp", startTime.toString());
+                traceBody.put("input", userInput);
+                traceBody.put("output", output);
+                traceBody.put("tags", List.of("investigator-ai", agentName));
+                if (sessionId != null) traceBody.put("sessionId", sessionId);
+                if (userId != null) traceBody.put("userId", userId);
 
                 var genBody = new LinkedHashMap<String, Object>();
                 genBody.put("id", genId);
@@ -145,7 +158,8 @@ public class LangfuseObservabilityListener implements ChatModelListener {
                     if (text.contains("financial forensics"))             return "FinancialFlowAgent";
                     if (text.contains("document intelligence"))           return "DocumentAgent";
                     if (text.contains("source verification"))             return "SourceVerificationAgent";
-                    if (text.contains("investigative journalism supervisor")) return "SupervisorAgent";
+                    if (text.contains("investigative journalism report writer") ||
+                        text.contains("investigative journalism supervisor")) return "SupervisorAgent";
                     return "UnknownAgent";
                 })
                 .orElse("LLMCall");
