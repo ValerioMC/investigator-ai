@@ -197,8 +197,3 @@ curl -s -X POST http://localhost:8080/api/v1/investigate \
 | `investigator-agents` | 5 LangChain4j agents + 4 tools, prompts in `/resources/prompts/` |
 | `investigator-api` | `POST /api/v1/investigate` entry point |
 | `investigator-web` | Vue 3 SPA + REST backend (sessions, entities, graph, history) |
-
-Full architecture, graph schema, and coding conventions: [CLAUDE.md](CLAUDE.md)
-
-
-claude --resume 1401f861-4575-4b86-8843-138f5afc7eff
