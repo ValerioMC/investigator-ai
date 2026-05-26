@@ -6,5 +6,5 @@ import dev.langchain4j.service.UserMessage;
 public interface DocumentAgent {
 
     @SystemMessage(fromResource = "prompts/DocumentAgent-system.txt")
-    String searchAndSynthesize(@UserMessage String query);
+    String synthesize(@UserMessage String payload);
 }

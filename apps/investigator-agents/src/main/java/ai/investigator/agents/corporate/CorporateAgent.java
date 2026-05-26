@@ -6,5 +6,5 @@ import dev.langchain4j.service.UserMessage;
 public interface CorporateAgent {
 
     @SystemMessage(fromResource = "prompts/CorporateAgent-system.txt")
-    String analyzeOwnership(@UserMessage String query);
+    String synthesize(@UserMessage String payload);
 }

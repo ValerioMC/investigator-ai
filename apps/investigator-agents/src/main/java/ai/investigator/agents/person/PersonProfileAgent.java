@@ -6,5 +6,5 @@ import dev.langchain4j.service.UserMessage;
 public interface PersonProfileAgent {
 
     @SystemMessage(fromResource = "prompts/PersonProfileAgent-system.txt")
-    String buildProfile(@UserMessage String query);
+    String synthesize(@UserMessage String payload);
 }

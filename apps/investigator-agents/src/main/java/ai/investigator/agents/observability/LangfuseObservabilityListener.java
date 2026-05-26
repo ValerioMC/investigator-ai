@@ -1,9 +1,7 @@
 package ai.investigator.agents.observability;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -16,53 +14,58 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Bridges LangChain4j {@code ChatModelListener} events into Langfuse ingestion
+ * events.
+ *
+ * <p>If a parent traceId is present in {@link LangfuseTraceContext}, the
+ * listener attaches each LLM call as a {@code generation} observation under
+ * that trace (and optionally as a child of a span the orchestrator opened) —
+ * the orchestrator owns the umbrella trace lifecycle.
+ *
+ * <p>If no parent traceId is set, the listener falls back to creating its own
+ * one-off trace per LLM call (backwards-compatible behaviour).
+ */
 @Component
 @ConditionalOnProperty(prefix = "langfuse", name = "enabled", havingValue = "true")
 public class LangfuseObservabilityListener implements ChatModelListener {
 
     private static final Logger log = LoggerFactory.getLogger(LangfuseObservabilityListener.class);
 
-    private static final String TRACE_ID   = "lf.traceId";
-    private static final String GEN_ID     = "lf.genId";
-    private static final String START_KEY  = "lf.startTime";
-    private static final String SESSION_ID = "lf.sessionId";
-    private static final String USER_ID    = "lf.userId";
+    private static final String TRACE_ID      = "lf.traceId";
+    private static final String GEN_ID        = "lf.genId";
+    private static final String START_KEY     = "lf.startTime";
+    private static final String SESSION_ID    = "lf.sessionId";
+    private static final String USER_ID       = "lf.userId";
+    private static final String PARENT_TRACE  = "lf.parentTrace";
+    private static final String PARENT_OBS    = "lf.parentObservation";
 
-    private final String ingestionUrl;
-    private final String authHeader;
-    private final HttpClient http;
-    private final ObjectMapper mapper;
+    private final LangfuseClient client;
 
-    public LangfuseObservabilityListener(LangfuseProperties props) {
-        this.ingestionUrl = props.baseUrl() + "/api/public/ingestion";
-        var creds = props.publicKey() + ":" + props.secretKey();
-        this.authHeader = "Basic " + Base64.getEncoder().encodeToString(creds.getBytes(StandardCharsets.UTF_8));
-        this.http = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1)
-                .build();
-        this.mapper = new ObjectMapper();
-        log.info("Langfuse tracing enabled → {}", ingestionUrl);
+    public LangfuseObservabilityListener(LangfuseClient client) {
+        this.client = client;
+        log.info("Langfuse tracing enabled via LangfuseClient");
     }
 
     @Override
     public void onRequest(ChatModelRequestContext ctx) {
-        ctx.attributes().put(TRACE_ID,  UUID.randomUUID().toString());
+        // Capture per-thread context now, because onResponse will run on a
+        // virtual thread that doesn't inherit ThreadLocals.
+        String parentTrace = LangfuseTraceContext.parentTrace();
+        String parentObs   = LangfuseTraceContext.parentObservation();
+
+        ctx.attributes().put(TRACE_ID,  parentTrace != null ? parentTrace : UUID.randomUUID().toString());
         ctx.attributes().put(GEN_ID,    UUID.randomUUID().toString());
         ctx.attributes().put(START_KEY, Instant.now());
-        // Capture the session/user from the per-thread context at request time,
-        // since onResponse runs on a virtual thread that may not inherit it.
+        if (parentTrace != null) ctx.attributes().put(PARENT_TRACE, Boolean.TRUE);
+        if (parentObs   != null) ctx.attributes().put(PARENT_OBS, parentObs);
+
         var sid = LangfuseTraceContext.session();
         if (sid != null) ctx.attributes().put(SESSION_ID, sid);
         var uid = LangfuseTraceContext.user();
@@ -80,71 +83,75 @@ public class LangfuseObservabilityListener implements ChatModelListener {
         var resp    = ctx.chatResponse();
         var endTime = Instant.now();
 
-        Thread.ofVirtual().start(() -> {
-            try {
-                var agentName = resolveAgentName(req.messages());
-                var userInput = extractUserInput(req.messages());
-                var output    = resp.aiMessage() != null ? resp.aiMessage().text() : "";
-                var usage     = resp.tokenUsage();
-                var model     = resp.modelName() != null ? resp.modelName()
-                                : req.modelName() != null ? req.modelName() : "ollama";
+        var agentName = resolveAgentName(req.messages());
+        var userInput = extractUserInput(req.messages());
+        var output    = resp.aiMessage() != null ? resp.aiMessage().text() : "";
+        var usage     = resp.tokenUsage();
+        var model     = resp.modelName() != null ? resp.modelName()
+                        : req.modelName() != null ? req.modelName() : "ollama";
 
-                var sessionId = (String) ctx.attributes().get(SESSION_ID);
-                var userId    = (String) ctx.attributes().get(USER_ID);
+        var sessionId   = (String)  ctx.attributes().get(SESSION_ID);
+        var userId      = (String)  ctx.attributes().get(USER_ID);
+        var parentObs   = (String)  ctx.attributes().get(PARENT_OBS);
+        boolean nested  = Boolean.TRUE.equals(ctx.attributes().get(PARENT_TRACE));
 
-                var traceBody = new LinkedHashMap<String, Object>();
-                traceBody.put("id", traceId);
-                traceBody.put("name", agentName);
-                traceBody.put("timestamp", startTime.toString());
-                traceBody.put("input", userInput);
-                traceBody.put("output", output);
-                traceBody.put("tags", List.of("investigator-ai", agentName));
-                if (sessionId != null) traceBody.put("sessionId", sessionId);
-                if (userId != null) traceBody.put("userId", userId);
+        var genBody = new LinkedHashMap<String, Object>();
+        genBody.put("id", genId);
+        genBody.put("traceId", traceId);
+        if (parentObs != null) genBody.put("parentObservationId", parentObs);
+        genBody.put("name", agentName);
+        genBody.put("startTime", startTime.toString());
+        genBody.put("endTime", endTime.toString());
+        genBody.put("model", model);
+        genBody.put("input", messagesAsJson(req.messages()));
+        genBody.put("output", Map.of("role", "assistant", "content", output));
+        if (usage != null) {
+            genBody.put("usage", Map.of(
+                "input",  usage.inputTokenCount(),
+                "output", usage.outputTokenCount(),
+                "total",  usage.totalTokenCount()
+            ));
+        }
+        var generationEvent = event("generation-create", startTime, genBody);
 
-                var genBody = new LinkedHashMap<String, Object>();
-                genBody.put("id", genId);
-                genBody.put("traceId", traceId);
-                genBody.put("name", agentName);
-                genBody.put("startTime", startTime.toString());
-                genBody.put("endTime", endTime.toString());
-                genBody.put("model", model);
-                genBody.put("input", messagesAsJson(req.messages()));
-                genBody.put("output", Map.of("role", "assistant", "content", output));
-                if (usage != null) {
-                    genBody.put("usage", map(
-                            "input",  usage.inputTokenCount(),
-                            "output", usage.outputTokenCount(),
-                            "total",  usage.totalTokenCount()
-                    ));
-                }
-
-                var batch = Map.of("batch", List.of(
-                        event("trace-create",      traceId, startTime, traceBody),
-                        event("generation-create", genId,   startTime, genBody)
-                ));
-
-                post(batch);
-            } catch (Exception e) {
-                log.warn("Langfuse ingestion failed [{}]: {}", e.getClass().getSimpleName(), e.getMessage(), e);
-            }
-        });
+        if (nested) {
+            // Parent trace is owned by the orchestrator — only emit the generation.
+            client.postEvents(List.of(generationEvent));
+        } else {
+            // Fallback: create a standalone trace per LLM call.
+            var traceBody = new LinkedHashMap<String, Object>();
+            traceBody.put("id", traceId);
+            traceBody.put("name", agentName);
+            traceBody.put("timestamp", startTime.toString());
+            traceBody.put("input", userInput);
+            traceBody.put("output", output);
+            traceBody.put("tags", List.of("investigator-ai", agentName));
+            if (sessionId != null) traceBody.put("sessionId", sessionId);
+            if (userId != null)    traceBody.put("userId", userId);
+            client.postEvents(List.of(
+                event("trace-create", startTime, traceBody),
+                generationEvent
+            ));
+        }
     }
 
     @Override
     public void onError(ChatModelErrorContext ctx) {
         var traceId = (String) ctx.attributes().get(TRACE_ID);
         if (traceId == null) return;
-        Thread.ofVirtual().start(() -> {
-            try {
-                post(Map.of("batch", List.of(event("trace-create", traceId, Instant.now(),
-                        map("id", traceId, "name", "investigator-ai",
-                            "level", "ERROR",
-                            "statusMessage", ctx.error().getMessage())))));  // NOSONAR: fire-and-forget
-            } catch (Exception e) {
-                log.warn("Langfuse error trace failed: {}", e.getMessage());
-            }
-        });
+        boolean nested = Boolean.TRUE.equals(ctx.attributes().get(PARENT_TRACE));
+        if (nested) {
+            // Don't pollute the umbrella trace; the orchestrator will record the failure.
+            log.warn("LLM call failed under parent trace {}: {}", traceId, ctx.error().getMessage());
+            return;
+        }
+        var body = new LinkedHashMap<String, Object>();
+        body.put("id", traceId);
+        body.put("name", "investigator-ai");
+        body.put("timestamp", Instant.now().toString());
+        body.put("level", "ERROR");
+        body.put("statusMessage", ctx.error().getMessage());
+        client.postEvents(List.of(event("trace-create", Instant.now(), body)));
     }
 
     // --- helpers ---
@@ -197,33 +204,12 @@ public class LangfuseObservabilityListener implements ChatModelListener {
         };
     }
 
-    private Map<String, Object> event(String type, String id, Instant ts, Object body) {
-        return map("id", UUID.randomUUID().toString(),
-                   "type", type,
-                   "timestamp", ts.toString(),
-                   "body", body);
-    }
-
-    @SuppressWarnings("unchecked")
-    private <K, V> Map<K, V> map(Object... kvPairs) {
-        var m = new LinkedHashMap<K, V>();
-        for (int i = 0; i < kvPairs.length; i += 2) {
-            m.put((K) kvPairs[i], (V) kvPairs[i + 1]);
-        }
-        return m;
-    }
-
-    private void post(Object payload) throws Exception {
-        var body = mapper.writeValueAsBytes(payload);
-        var req  = HttpRequest.newBuilder()
-                .uri(URI.create(ingestionUrl))
-                .header("Content-Type", "application/json")
-                .header("Authorization", authHeader)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(body))
-                .build();
-        var resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() >= 300) {
-            log.warn("Langfuse returned {}: {}", resp.statusCode(), resp.body());
-        }
+    private Map<String, Object> event(String type, Instant ts, Map<String, Object> body) {
+        var ev = new LinkedHashMap<String, Object>();
+        ev.put("id", UUID.randomUUID().toString());
+        ev.put("type", type);
+        ev.put("timestamp", ts.toString());
+        ev.put("body", body);
+        return ev;
     }
 }

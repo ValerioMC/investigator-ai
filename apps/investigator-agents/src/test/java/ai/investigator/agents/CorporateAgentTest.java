@@ -17,7 +17,7 @@ class CorporateAgentTest {
     CorporateAgent corporateAgent;
 
     @Test
-    void shouldAnalyzeOwnership() {
+    void shouldSynthesizeOwnership() {
         String mockResponse = """
             OWNERSHIP CHAIN for Costruzioni Ferretti Srl:
             - Marco Ferretti → OWNS 49.0% (direct, IT) [PUBLIC ROLE: Consigliere comunale]
@@ -26,9 +26,9 @@ class CorporateAgentTest {
             - Remaining 0.0%: fully accounted
             """;
 
-        when(corporateAgent.analyzeOwnership(anyString())).thenReturn(mockResponse);
+        when(corporateAgent.synthesize(anyString())).thenReturn(mockResponse);
 
-        String result = corporateAgent.analyzeOwnership(
+        String result = corporateAgent.synthesize(
             "Who owns Costruzioni Ferretti Srl and are there any tax haven connections?");
 
         assertThat(result).contains("LuxHold SA");

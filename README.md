@@ -74,11 +74,21 @@ This sends the following query to the SupervisorAgent:
 > Focus entities: `Costruzioni Ferretti Srl`, `Marco Ferretti`, `Luigi Conti`
 > Depth: 4
 
-The SupervisorAgent will:
-1. **CorporateAgent** — trace the ownership chain `Ferretti → LuxHold SA → Costruzioni Ferretti Srl`
-2. **PersonProfileAgent** — map Luigi Conti's mayoral role and family link to Mario Conti (LuxHold shareholder)
-3. **FinancialFlowAgent** — flag the margin anomaly (+340% EBITDA vs. sector average) in the contract years
-4. **SourceVerificationAgent** — cross-reference findings and assign confidence scores
+The `InvestigationOrchestrator` runs two phases per domain:
+
+**Phase 1 — deterministic Java data collection** (no LLM, no hallucination risk):
+- entity resolution against the graph (persons vs. companies, detected from query text)
+- year/date-range extraction via regex
+- Neo4j traversal and Qdrant search via domain-specific `*AgentTool` classes
+
+**Phase 2 — LLM synthesis** (each subagent receives pre-collected data and emits a JSON `AgentReport`):
+1. **CorporateAgent** — ownership chain `Ferretti → LuxHold SA → Costruzioni Ferretti Srl`
+2. **PersonProfileAgent** — Conti's mayoral role + family link to LuxHold
+3. **FinancialFlowAgent** — EBITDA anomaly (+340% vs. sector avg) in contract years
+4. **DocumentAgent** — semantic match across indexed docs
+5. **SourceVerificationAgent** — cross-link and confidence scoring
+
+All five JSON reports are bundled and fed to **SupervisorAgent** for final merge into `InvestigationReport`.
 
 Expected findings (from seeded graph):
 - `HIGH` — Ferretti is 77% beneficial owner of Costruzioni Ferretti Srl via LuxHold SA
@@ -90,15 +100,33 @@ the same query interactively from the Investigation view.
 
 ### 4. Verify traces in Langfuse
 
-After `make investigate` completes, open Langfuse to inspect the full agent trace:
+After `make investigate` completes, open Langfuse to inspect the full orchestration tree:
 
 1. Open **http://localhost:3000**
 2. Log in: `admin@investigator-ai.local` / `investigator`
 3. Navigate to the **investigator-ai** project → **Traces**
 
-Each LLM call appears as a generation span with the agent name, input messages,
-output, token counts, and latency. The SupervisorAgent call and each delegated
-sub-agent call produce separate spans in the same trace.
+Each investigation produces a single umbrella trace with this span structure:
+
+```
+Investigation (trace)
+  └─ resolve-entities-and-window    ← deterministic Java, no LLM
+  └─ step-corporate                 ← span wrapping CorporateAgent synthesis
+       └─ CorporateAgent (generation)
+  └─ step-person
+       └─ PersonProfileAgent (generation)
+  └─ step-financial
+       └─ FinancialFlowAgent (generation)
+  └─ step-document
+       └─ DocumentAgent (generation)
+  └─ step-verification
+       └─ SourceVerificationAgent (generation)
+  └─ step-supervisor
+       └─ SupervisorAgent (generation)
+```
+
+Each span carries the full pre-collected payload as input and the JSON report as output.
+Langfuse observability is optional — disable with `langfuse.enabled=false`.
 
 ---
 
@@ -182,12 +210,12 @@ curl -s -X POST http://localhost:8080/api/v1/investigate \
 | Layer | Technology |
 |-------|-----------|
 | Runtime | Spring Boot 4.0 + Java 21 virtual threads |
-| AI | LangChain4j 1.15 + Ollama (qwen3.6:35b) |
+| AI | LangChain4j 1.14.1 + Ollama (qwen3.6:35b, think=false) |
 | Graph | Neo4j 5.x — raw Java Driver, Cypher in `@Query` annotations |
 | Vectors | Qdrant 1.x — 512-token chunks, nomic-embed-text embeddings |
 | Persistence | PostgreSQL 16 + Spring Data JDBC + Liquibase |
 | Frontend | Vue 3 + Vite + Tailwind CSS + Cytoscape.js |
-| Observability | Langfuse (agent traces) + Micrometer + Actuator |
+| Observability | Langfuse v3 self-hosted (custom `LangfuseClient`) + Micrometer + Actuator |
 | K8s | Minikube, profile `investigator-ai`, `imagePullPolicy: Never` |
 
 ## Modules
@@ -197,6 +225,21 @@ curl -s -X POST http://localhost:8080/api/v1/investigate \
 | `investigator-domain` | Pure Java 21 domain model — records, sealed errors, report types |
 | `investigator-graph` | Neo4j repository — all Cypher in `@Query` annotations |
 | `investigator-vector` | Qdrant chunker, embedder, vector repository |
-| `investigator-agents` | 5 LangChain4j agents + delegate tools + observability listener |
+| `investigator-agents` | Orchestrator + 5 LangChain4j agents + domain tool collectors + Langfuse client |
 | `investigator-api` | `POST /api/v1/investigate` entry point |
 | `investigator-web` | Vue 3 SPA + REST backend (sessions, entities, graph, history) |
+
+### investigator-agents internals
+
+```
+InvestigationOrchestrator       ← main entry point, Java orchestration (no LLM in the hot path)
+  ├── *AgentTool classes         ← data collectors: hit Neo4j + Qdrant, return formatted strings
+  └── *Agent interfaces          ← LLM synthesis only, receive pre-collected text, emit JSON AgentReport
+
+AgentConfiguration              ← two ChatModel beans:
+  ├── ollamaChatModel (primary)  ← default, all sub-agents
+  └── supervisorChatModel        ← responseFormat=JSON, numPredict=16384 (prevents mid-array truncation)
+
+LangfuseClient                  ← thin HTTP client for Langfuse ingestion API (fire-and-forget, virtual threads)
+LangfuseObservabilityListener   ← LangChain4j listener, attaches generation spans to parent span from context
+```
