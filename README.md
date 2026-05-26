@@ -1,7 +1,7 @@
 # InvestigatorAI
 
 Journalistic investigation assistant combining a relationship graph (Neo4j),
-vector search (Qdrant), and a multi-agent LLM pipeline (Quarkus + LangChain4j)
+vector search (Qdrant), and a multi-agent LLM pipeline (Spring Boot + LangChain4j)
 to answer complex investigative queries like:
 
 > "Chi controlla realmente Costruzioni Ferretti Srl e ci sono conflitti di
@@ -14,25 +14,12 @@ to answer complex investigative queries like:
 ### Prerequisites
 
 - Docker Desktop running
-- `minikube`, `kubectl`, Java 21, Maven 3.9+
-- An Anthropic API key
+- `minikube`, `kubectl`, `ollama`, Java 21, Maven 3.9+
 
-### 1. Create secrets file
+`make up` will pull `qwen3.6:35b` (~24 GB) and `nomic-embed-text` (~270 MB) via
+Ollama on first run if they are not already present.
 
-```bash
-cp k8s/secret.yaml.template k8s/secret.yaml
-```
-
-Edit `k8s/secret.yaml` — fill in real base64-encoded values:
-
-```bash
-echo -n 'sk-ant-your-key' | base64   # ANTHROPIC_API_KEY
-echo -n 'your-neo4j-pass' | base64   # NEO4J_PASSWORD
-echo -n 'your-pg-pass'    | base64   # POSTGRES_PASSWORD
-# Langfuse keys if you want tracing; otherwise leave as CHANGE_ME
-```
-
-### 2. Spin up everything
+### 1. Spin up everything
 
 ```bash
 make up
@@ -41,20 +28,22 @@ make up
 This single command:
 - Creates a minikube profile named `investigator-ai` (4 CPU / 6 GB RAM)
 - Enables ingress and metrics-server addons
+- Auto-generates `k8s/secret.yaml` with random credentials (skipped if the file already exists)
 - Deploys Neo4j, Qdrant, PostgreSQL, and Langfuse
-- Builds both Quarkus container images inside the minikube daemon (no registry needed)
+- Builds both Spring Boot container images inside the minikube daemon (no registry needed)
 - Deploys `investigator-api` (port 8080) and `investigator-web` (port 8090)
 - Starts background port-forwards for all services
 
 Takes ~10 minutes on first run (image pulls + Maven build).
 
-### 3. Load the investigation scenario
+### 2. Load the investigation scenario
 
 ```bash
 make seed
 ```
 
-Populates Neo4j with a realistic corruption scenario (Brescia, 2022-2023):
+Populates Neo4j with a realistic corruption scenario (Brescia, 2022-2023) and
+bootstraps Langfuse with the default admin user, project, and API keys:
 
 | Entity | Type | Details |
 |--------|------|---------|
@@ -70,7 +59,7 @@ Populates Neo4j with a realistic corruption scenario (Brescia, 2022-2023):
 Graph loaded: 11 nodes, 14 relationships including ownership chains,
 family ties, and contract award paths.
 
-### 4. Run the investigation
+### 3. Run the investigation
 
 ```bash
 make investigate
@@ -99,23 +88,37 @@ Expected findings (from seeded graph):
 You can also open the Vue SPA at **http://localhost:8090** and submit
 the same query interactively from the Investigation view.
 
+### 4. Verify traces in Langfuse
+
+After `make investigate` completes, open Langfuse to inspect the full agent trace:
+
+1. Open **http://localhost:3000**
+2. Log in: `admin@investigator-ai.local` / `investigator`
+3. Navigate to the **investigator-ai** project → **Traces**
+
+Each LLM call appears as a generation span with the agent name, input messages,
+output, token counts, and latency. The SupervisorAgent call and each delegated
+sub-agent call produce separate spans in the same trace.
+
 ---
 
 ## All make targets
 
 ```
-make up           full setup: minikube + infra + build + deploy + port-forward
-make seed         load Ferretti scenario into Neo4j
-make investigate  run the example query (curl to localhost:8080)
-make down         delete minikube profile (destroys all data)
+make up              full setup: ollama check + minikube + infra + build + deploy + port-forward
+make seed            load Ferretti scenario into Neo4j + bootstrap Langfuse
+make seed-langfuse   bootstrap Langfuse only (admin user, project, API keys) — idempotent
+make investigate     run the example query (curl to localhost:8080)
+make down            delete minikube profile (destroys all data)
 
-make build        rebuild container images only (re-runs Maven + Jib)
-make deploy       re-apply k8s manifests and restart pods (no rebuild)
-make port-forward restart background port-forwards
-make stop-forward kill all background port-forwards
-make status       show pods and services
-make logs-api     tail investigator-api
-make logs-web     tail investigator-web
+make build           rebuild container images (Maven package + docker build inside minikube)
+make deploy          re-apply k8s manifests and restart pods (no rebuild)
+make port-forward    restart background port-forwards
+make stop-forward    kill all background port-forwards
+make status          show pods and services
+make logs-api        tail investigator-api
+make logs-web        tail investigator-web
+make k9s             open k9s on the investigator-ai cluster
 ```
 
 ### Port-forward map (after `make up` or `make port-forward`)
@@ -178,13 +181,13 @@ curl -s -X POST http://localhost:8080/api/v1/investigate \
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Quarkus 3.15 + Java 21 virtual threads |
-| AI | LangChain4j 1.10 + Claude Sonnet (Anthropic) |
-| Graph | Neo4j 5.26 — raw Java Driver, all Cypher in `GraphQueries` constants |
-| Vectors | Qdrant 1.13 — 512-token chunks, Ollama embeddings |
-| Persistence | PostgreSQL 16 + Hibernate ORM Panache + Flyway |
-| Frontend | Vue 3 + Vite + Tailwind CSS + Cytoscape.js (bundled in Quarkus jar) |
-| Observability | Langfuse (agent traces) + Micrometer + Prometheus |
+| Runtime | Spring Boot 4.0 + Java 21 virtual threads |
+| AI | LangChain4j 1.15 + Ollama (qwen3.6:35b) |
+| Graph | Neo4j 5.x — raw Java Driver, Cypher in `@Query` annotations |
+| Vectors | Qdrant 1.x — 512-token chunks, nomic-embed-text embeddings |
+| Persistence | PostgreSQL 16 + Spring Data JDBC + Liquibase |
+| Frontend | Vue 3 + Vite + Tailwind CSS + Cytoscape.js |
+| Observability | Langfuse (agent traces) + Micrometer + Actuator |
 | K8s | Minikube, profile `investigator-ai`, `imagePullPolicy: Never` |
 
 ## Modules
@@ -192,8 +195,8 @@ curl -s -X POST http://localhost:8080/api/v1/investigate \
 | Module | Description |
 |--------|-------------|
 | `investigator-domain` | Pure Java 21 domain model — records, sealed errors, report types |
-| `investigator-graph` | Neo4j repository — all Cypher in `GraphQueries` constants |
+| `investigator-graph` | Neo4j repository — all Cypher in `@Query` annotations |
 | `investigator-vector` | Qdrant chunker, embedder, vector repository |
-| `investigator-agents` | 5 LangChain4j agents + 4 tools, prompts in `/resources/prompts/` |
+| `investigator-agents` | 5 LangChain4j agents + delegate tools + observability listener |
 | `investigator-api` | `POST /api/v1/investigate` entry point |
 | `investigator-web` | Vue 3 SPA + REST backend (sessions, entities, graph, history) |

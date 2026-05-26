@@ -21,12 +21,18 @@ public final class GraphQueries {
         RETURN DISTINCT c, j
         """;
 
+    // Finds both direct owners and persons who own a holding company that controls the target.
     public static final String FIND_OWNERSHIP_CHAIN =
         """
-        MATCH path = (p:Person)-[r:OWNS]->(c:Company {name: $companyName})
+        MATCH (p:Person)-[r:OWNS]->(c:Company {name: $companyName})
         RETURN p.fullName AS owner, r.sharePercent AS share,
-               r.directOrIndirect AS ownershipType, p.nationality AS nationality
-        ORDER BY r.sharePercent DESC
+               coalesce(r.directOrIndirect, 'DIRECT') AS ownershipType, p.nationality AS nationality
+        UNION
+        MATCH (holding:Company)-[:CONTROLS]->(c:Company {name: $companyName})
+        MATCH (p:Person)-[r:OWNS]->(holding)
+        RETURN p.fullName AS owner, r.sharePercent AS share,
+               'INDIRECT via ' + holding.name AS ownershipType, p.nationality AS nationality
+        ORDER BY share DESC
         """;
 
     public static final String FIND_COMPANY_CONTROLLERS =
@@ -47,11 +53,15 @@ public final class GraphQueries {
                co.name AS company
         """;
 
+    // Detects direct conflict (person owns/directs the company) AND family-proxy conflict
+    // (family member owns the company or a holding that controls it).
     public static final String DETECT_CONFLICT_FOR_PERSON =
         """
         MATCH (p:Person {fullName: $personName})-[:HELD_PUBLIC_ROLE]->(pb:PublicBody)
               -[:ISSUED]->(ct:Contract)-[:AWARDED_TO]->(co:Company)
         WHERE (p)-[:OWNS|IS_DIRECTOR_OF]->(co)
+           OR (p)-[:FAMILY_RELATION]-(:Person)-[:OWNS|IS_DIRECTOR_OF]->(co)
+           OR (p)-[:FAMILY_RELATION]-(:Person)-[:OWNS]->(:Company)-[:CONTROLS]->(co)
         RETURN pb.name AS publicBody, ct.title AS contract,
                ct.amount AS amount, co.name AS company
         """;
@@ -110,6 +120,48 @@ public final class GraphQueries {
                d.publishedAt AS publishedAt, r.context AS context,
                d.reliability AS reliability
         ORDER BY d.publishedAt DESC
+        """;
+
+    // --- Catalog lookups (used by orchestrator for entity auto-resolution) ---
+
+    public static final String LIST_ALL_PERSON_NAMES =
+        """
+        MATCH (p:Person)
+        WHERE p.fullName IS NOT NULL
+        RETURN p.fullName AS name
+        """;
+
+    public static final String LIST_ALL_COMPANY_NAMES =
+        """
+        MATCH (c:Company)
+        WHERE c.name IS NOT NULL
+        RETURN c.name AS name
+        """;
+
+    // Conflicts of interest filtered to a date window, including family + control chains.
+    public static final String DETECT_CONFLICTS_IN_RANGE =
+        """
+        MATCH (p:Person)-[:HELD_PUBLIC_ROLE]->(pb:PublicBody)
+              -[:ISSUED]->(ct:Contract)-[:AWARDED_TO]->(co:Company)
+        WHERE ct.awardedAt >= date($from) AND ct.awardedAt <= date($to)
+          AND (
+            (p)-[:OWNS|IS_DIRECTOR_OF]->(co)
+            OR (p)-[:FAMILY_RELATION]-(:Person)-[:OWNS|IS_DIRECTOR_OF]->(co)
+            OR (p)-[:FAMILY_RELATION]-(:Person)-[:OWNS]->(:Company)-[:CONTROLS]->(co)
+          )
+        RETURN p.fullName AS person, pb.name AS publicBody,
+               ct.title AS contract, ct.amount AS amount, ct.awardedAt AS awardedAt,
+               co.name AS company
+        ORDER BY ct.awardedAt
+        """;
+
+    // Shortest path between a Person and a Company (any relationship, up to 6 hops).
+    public static final String PERSON_COMPANY_PATH =
+        """
+        MATCH path = shortestPath(
+          (a:Person {fullName: $personName})-[*..6]-(b:Company {name: $companyName})
+        )
+        RETURN path, length(path) AS hops
         """;
 
     // --- Contract queries ---

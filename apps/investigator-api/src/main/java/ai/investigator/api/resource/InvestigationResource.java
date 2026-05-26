@@ -1,9 +1,12 @@
 package ai.investigator.api.resource;
 
-import ai.investigator.agents.supervisor.SupervisorAgent;
+import ai.investigator.agents.observability.LangfuseTraceContext;
+import ai.investigator.agents.supervisor.InvestigationOrchestrator;
 import ai.investigator.domain.report.EntityMap;
 import ai.investigator.domain.report.InvestigationReport;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.http.ResponseEntity;
@@ -11,20 +14,24 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
 @RequestMapping("/api/v1")
 public class InvestigationResource {
 
-    private final SupervisorAgent supervisor;
+    private final InvestigationOrchestrator orchestrator;
     private final MeterRegistry metrics;
-    private final ObjectMapper mapper = new ObjectMapper();
+    // SNAKE_CASE to match the LLM's output field names (entity_map, recommended_follow_ups, agent_source)
+    private final ObjectMapper mapper = new ObjectMapper()
+        .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+        .configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
 
     private final AtomicLong investigationCount = new AtomicLong(0);
 
-    public InvestigationResource(SupervisorAgent supervisor, MeterRegistry metrics) {
-        this.supervisor = supervisor;
+    public InvestigationResource(InvestigationOrchestrator orchestrator, MeterRegistry metrics) {
+        this.orchestrator = orchestrator;
         this.metrics = metrics;
     }
 
@@ -34,13 +41,11 @@ public class InvestigationResource {
         investigationCount.incrementAndGet();
         metrics.counter("investigations.total").increment();
 
+        // Each /investigate call is its own Langfuse session — without this the
+        // Sessions tab in Langfuse stays empty.
+        LangfuseTraceContext.setSession(UUID.randomUUID().toString());
         try {
-            String focusHint = request.focusEntities().isEmpty() ? "" :
-                " Focus on: " + String.join(", ", request.focusEntities()) + ".";
-            String prompt = request.query() + focusHint +
-                " Investigation depth: " + request.depth() + " hops.";
-
-            String rawResponse = supervisor.investigate(prompt);
+            String rawResponse = orchestrator.investigate(request.query(), request.focusEntities());
 
             InvestigationReport report = parseOrWrap(rawResponse, request.query());
 
@@ -52,6 +57,8 @@ public class InvestigationResource {
             metrics.counter("investigations.errors").increment();
             timer.stop(metrics.timer("investigations.latency"));
             throw e;
+        } finally {
+            LangfuseTraceContext.clear();
         }
     }
 
@@ -62,10 +69,11 @@ public class InvestigationResource {
 
     private InvestigationReport parseOrWrap(String raw, String originalQuery) {
         try {
-            String json = raw.trim();
-            if (json.startsWith("```")) {
-                json = json.replaceAll("^```[a-z]*\n?", "").replaceAll("\n?```$", "").trim();
-            }
+            String json = raw.replaceAll("(?s)<think>.*?</think>", "").trim();
+            json = json.replaceAll("(?s)```(?:json)?\\s*", "").trim();
+            int start = json.indexOf('{');
+            int end   = json.lastIndexOf('}');
+            if (start != -1 && end > start) json = json.substring(start, end + 1);
             return mapper.readValue(json, InvestigationReport.class);
         } catch (Exception e) {
             return new InvestigationReport(

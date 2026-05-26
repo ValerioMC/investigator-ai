@@ -31,7 +31,8 @@ WHERE n.id IN [
   'c-001','c-002','c-003',
   'k-001','k-002',
   'pb-001',
-  'j-IT','j-LU'
+  'j-IT','j-LU',
+  'd-001','d-002','d-003'
 ]
 DETACH DELETE n
 "
@@ -95,14 +96,14 @@ SET pb.name   = 'Comune di Brescia',
 MERGE (k:Contract {id: 'k-001'})
 SET k.title          = 'Riqualificazione Piazza Loggia — Fase II',
     k.amount         = 1200000,
-    k.awardedAt      = '2022-04-15',
+    k.awardedAt      = date('2022-04-15'),
     k.publicBodyName = 'Comune di Brescia',
     k.suspicionScore = 0.88;
 
 MERGE (k:Contract {id: 'k-002'})
 SET k.title          = 'Manutenzione straordinaria rete stradale urbana',
     k.amount         = 450000,
-    k.awardedAt      = '2023-01-20',
+    k.awardedAt      = date('2023-01-20'),
     k.publicBodyName = 'Comune di Brescia',
     k.suspicionScore = 0.71;
 "
@@ -163,6 +164,51 @@ MERGE (luxhold)-[:REGISTERED_IN]->(j);
 
 MATCH (offshore:Company {id: 'c-003'}), (j:Jurisdiction {id: 'j-LU'})
 MERGE (offshore)-[:REGISTERED_IN]->(j);
+"
+
+echo "==> Creating documents and mentions..."
+run_cypher "
+MERGE (d:Document {id: 'd-001'})
+SET d.title       = 'Brescia: appalto Piazza Loggia, dubbi sulla gara',
+    d.sourceType  = 'news_article',
+    d.sourceUrl   = 'https://example.org/news/brescia-piazza-loggia',
+    d.publishedAt = date('2022-05-04'),
+    d.reliability = 'MEDIUM';
+
+MERGE (d:Document {id: 'd-002'})
+SET d.title       = 'Indagine Procura Brescia: rete societaria Ferretti',
+    d.sourceType  = 'court_record',
+    d.sourceUrl   = 'https://example.org/court/brescia-ferretti-2023',
+    d.publishedAt = date('2023-03-18'),
+    d.reliability = 'HIGH';
+
+MERGE (d:Document {id: 'd-003'})
+SET d.title       = 'Dichiarazione redditi Sindaco Conti — anno 2022',
+    d.sourceType  = 'official_filing',
+    d.sourceUrl   = 'https://example.org/filings/conti-2022',
+    d.publishedAt = date('2023-06-30'),
+    d.reliability = 'HIGH';
+
+MATCH (luigi:Person {id: 'p-002'}), (d1:Document {id: 'd-001'})
+MERGE (luigi)-[:MENTIONED_IN {context: 'voto in Consiglio comunale su delibera appalti'}]->(d1);
+
+MATCH (srl:Company {id: 'c-001'}), (d1:Document {id: 'd-001'})
+MERGE (srl)-[:MENTIONED_IN {context: 'aggiudicataria appalto Piazza Loggia'}]->(d1);
+
+MATCH (luigi:Person {id: 'p-002'}), (d2:Document {id: 'd-002'})
+MERGE (luigi)-[:MENTIONED_IN {context: 'fascicolo aperto su conflitto di interessi'}]->(d2);
+
+MATCH (mario:Person {id: 'p-003'}), (d2:Document {id: 'd-002'})
+MERGE (mario)-[:MENTIONED_IN {context: 'socio occulto LuxHold SA'}]->(d2);
+
+MATCH (srl:Company {id: 'c-001'}), (d2:Document {id: 'd-002'})
+MERGE (srl)-[:MENTIONED_IN {context: 'destinataria appalti Comune di Brescia 2022-2023'}]->(d2);
+
+MATCH (lux:Company {id: 'c-002'}), (d2:Document {id: 'd-002'})
+MERGE (lux)-[:MENTIONED_IN {context: 'holding di controllo registrata in Lussemburgo'}]->(d2);
+
+MATCH (luigi:Person {id: 'p-002'}), (d3:Document {id: 'd-003'})
+MERGE (luigi)-[:MENTIONED_IN {context: 'mancata dichiarazione partecipazioni indirette del fratello'}]->(d3);
 "
 
 echo ""

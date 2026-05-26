@@ -16,6 +16,7 @@ LF_PUB="pk-lf-$(openssl rand -hex 16)"
 LF_SEC="sk-lf-$(openssl rand -hex 32)"
 LF_AUTH=$(openssl rand -base64 32 | tr -d '\n=+/')
 LF_SALT=$(openssl rand -hex 16)
+LF_ENC=$(openssl rand -hex 32)
 
 python3 - <<PYEOF
 import base64
@@ -29,6 +30,7 @@ vals = {
     'LANGFUSE_SECRET_KEY':      enc('$LF_SEC'),
     'LANGFUSE_NEXTAUTH_SECRET': enc('$LF_AUTH'),
     'LANGFUSE_SALT':            enc('$LF_SALT'),
+    'LANGFUSE_ENCRYPTION_KEY':  enc('$LF_ENC'),
     'POSTGRES_PASSWORD':        enc('$PG_PASS'),
 }
 

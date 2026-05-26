@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-minio
+  namespace: investigator-ai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: langfuse-minio
+  template:
+    metadata:
+      labels:
+        app: langfuse-minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Start MinIO in background, create required bucket, foreground MinIO
+              minio server /data --console-address :9001 &
+              MINIO_PID=$!
+              until curl -sf http://localhost:9000/minio/health/ready; do sleep 2; done
+              mc alias set local http://localhost:9000 minio minio123
+              mc mb local/langfuse-events --ignore-existing || true
+              wait $MINIO_PID
+          ports:
+            - containerPort: 9000   # S3 API
+            - containerPort: 9001   # console
+          env:
+            - name: MINIO_ROOT_USER
+              value: minio
+            - name: MINIO_ROOT_PASSWORD
+              value: minio123
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: minio-data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 6
+      volumes:
+        - name: minio-data
+          persistentVolumeClaim:
+            claimName: langfuse-minio-pvc

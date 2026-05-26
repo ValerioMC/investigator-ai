@@ -71,7 +71,7 @@ public class Neo4jGraphRepository {
                     r.get("publicBody").asString(),
                     r.get("contract").asString(),
                     r.get("amount").asDouble(0.0),
-                    r.get("awardedAt").asLocalDate(),
+                    readLocalDate(r.get("awardedAt")),
                     r.get("company").asString()
                 ));
         }
@@ -162,7 +162,7 @@ public class Neo4jGraphRepository {
                 .list(r -> new ContractEntry(
                     r.get("title").asString(),
                     r.get("amount").asDouble(0.0),
-                    r.get("awardedAt").asLocalDate(),
+                    readLocalDate(r.get("awardedAt")),
                     r.get("issuedBy").asString()
                 ));
         }
@@ -181,7 +181,7 @@ public class Neo4jGraphRepository {
                 .list(r -> new DocumentRef(
                     r.get("title").asString(),
                     r.get("sourceType").asString(),
-                    r.get("publishedAt").isNull() ? null : r.get("publishedAt").asLocalDate(),
+                    readLocalDate(r.get("publishedAt")),
                     r.get("context").asString(""),
                     r.get("reliability").asString("UNVERIFIED")
                 ));
@@ -196,16 +196,74 @@ public class Neo4jGraphRepository {
         try (Session session = driver.session()) {
             var result = session.run(GraphQueries.SHORTEST_PATH,
                 Map.of("person1", person1, "person2", person2));
-            if (!result.hasNext()) return null;
-            Record r = result.next();
-            int hops = r.get("hops").asInt();
-            var path = r.get("path").asPath();
-            var names = new java.util.ArrayList<String>();
-            path.nodes().forEach(n -> {
-                if (n.containsKey("fullName")) names.add(n.get("fullName").asString());
-                else if (n.containsKey("name")) names.add(n.get("name").asString());
-            });
-            return new PathResult(hops, names);
+            return readPath(result);
+        }
+    }
+
+    public PathResult personToCompanyPath(String personName, String companyName) {
+        try (Session session = driver.session()) {
+            var result = session.run(GraphQueries.PERSON_COMPANY_PATH,
+                Map.of("personName", personName, "companyName", companyName));
+            return readPath(result);
+        }
+    }
+
+    private static PathResult readPath(org.neo4j.driver.Result result) {
+        if (!result.hasNext()) return null;
+        Record r = result.next();
+        int hops = r.get("hops").asInt();
+        var path = r.get("path").asPath();
+        var names = new java.util.ArrayList<String>();
+        path.nodes().forEach(n -> {
+            if (n.containsKey("fullName")) names.add(n.get("fullName").asString());
+            else if (n.containsKey("name")) names.add(n.get("name").asString());
+            else if (n.containsKey("title")) names.add(n.get("title").asString());
+            else names.add(n.labels().iterator().next());
+        });
+        return new PathResult(hops, names);
+    }
+
+    // --- Catalog ---
+
+    public List<String> listAllPersonNames() {
+        try (Session session = driver.session()) {
+            return session.run(GraphQueries.LIST_ALL_PERSON_NAMES)
+                .list(r -> r.get("name").asString());
+        }
+    }
+
+    public List<String> listAllCompanyNames() {
+        try (Session session = driver.session()) {
+            return session.run(GraphQueries.LIST_ALL_COMPANY_NAMES)
+                .list(r -> r.get("name").asString());
+        }
+    }
+
+    public List<ConflictEntry> detectConflictsInRange(String from, String to) {
+        try (Session session = driver.session()) {
+            return session.run(GraphQueries.DETECT_CONFLICTS_IN_RANGE,
+                    Map.of("from", from, "to", to))
+                .list(r -> new ConflictEntry(
+                    r.get("person").asString(),
+                    r.get("publicBody").asString(),
+                    r.get("contract").asString(),
+                    r.get("amount").asDouble(0.0),
+                    readLocalDate(r.get("awardedAt")),
+                    r.get("company").asString()
+                ));
+        }
+    }
+
+    // --- Helpers ---
+
+    // Neo4j stores dates as DATE type but legacy seed data may store them as strings.
+    private static LocalDate readLocalDate(org.neo4j.driver.Value v) {
+        if (v == null || v.isNull()) return null;
+        try {
+            return v.asLocalDate();
+        } catch (Exception e) {
+            var s = v.asString();
+            return s.isBlank() ? null : LocalDate.parse(s);
         }
     }
 

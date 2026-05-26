@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-clickhouse
+  namespace: investigator-ai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: langfuse-clickhouse
+  template:
+    metadata:
+      labels:
+        app: langfuse-clickhouse
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:24.12-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8123  # HTTP
+            - containerPort: 9000  # native TCP
+            - containerPort: 9181  # Keeper (ZooKeeper-compatible)
+          env:
+            - name: CLICKHOUSE_USER
+              value: langfuse
+            - name: CLICKHOUSE_PASSWORD
+              value: langfuse
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          volumeMounts:
+            - name: clickhouse-data
+              mountPath: /var/lib/clickhouse
+            - name: keeper-config
+              mountPath: /etc/clickhouse-server/config.d/keeper.xml
+              subPath: keeper.xml
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+      volumes:
+        - name: clickhouse-data
+          persistentVolumeClaim:
+            claimName: langfuse-clickhouse-pvc
+        - name: keeper-config
+          configMap:
+            name: langfuse-clickhouse-config

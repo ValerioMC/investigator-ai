@@ -1,6 +1,7 @@
 package ai.investigator.web.resource;
 
-import ai.investigator.agents.supervisor.SupervisorAgent;
+import ai.investigator.agents.observability.LangfuseTraceContext;
+import ai.investigator.agents.supervisor.InvestigationOrchestrator;
 import ai.investigator.web.dto.SessionDto;
 import ai.investigator.web.entity.InvestigationSession;
 import ai.investigator.web.entity.InvestigationSession.Status;
@@ -29,17 +30,17 @@ public class SessionResource {
     private static final UUID DEFAULT_WORKSPACE =
         UUID.fromString("00000000-0000-0000-0000-000000000001");
 
-    private final SupervisorAgent supervisor;
+    private final InvestigationOrchestrator orchestrator;
     private final ObjectMapper mapper = new ObjectMapper();
     private final InvestigationSessionRepository sessions;
     private final WorkspaceRepository workspaces;
     private final AuditLogService auditLog;
 
-    public SessionResource(SupervisorAgent supervisor,
+    public SessionResource(InvestigationOrchestrator orchestrator,
                             InvestigationSessionRepository sessions,
                             WorkspaceRepository workspaces,
                             AuditLogService auditLog) {
-        this.supervisor = supervisor;
+        this.orchestrator = orchestrator;
         this.sessions = sessions;
         this.workspaces = workspaces;
         this.auditLog = auditLog;
@@ -67,13 +68,12 @@ public class SessionResource {
         auditLog.log(DEFAULT_WORKSPACE, null, "INVESTIGATION_STARTED",
             "SESSION", session.id.toString(), null);
 
-        // LLM call outside transaction
-        String focusHint = req.focusEntities().isEmpty() ? "" :
-            " Focus on: " + String.join(", ", req.focusEntities()) + ".";
-        String prompt = req.query() + focusHint + " Depth: " + req.depth();
-
+        // LLM call outside transaction. Bind the Langfuse session/user id
+        // so every sub-trace generated downstream is grouped under this session.
+        LangfuseTraceContext.setSession(session.id.toString());
+        LangfuseTraceContext.setUser(DEFAULT_WORKSPACE.toString());
         try {
-            String rawText = supervisor.investigate(prompt);
+            String rawText = orchestrator.investigate(req.query(), req.focusEntities());
             String rawReport = extractJson(rawText);
             if (rawReport == null) {
                 log.warn("LLM did not return valid JSON for session {}", session.id);
@@ -91,6 +91,8 @@ public class SessionResource {
             auditLog.log(DEFAULT_WORKSPACE, null, "INVESTIGATION_FAILED",
                 "SESSION", session.id.toString(),
                 "{\"error\":\"" + errMsg.replace("\"", "'") + "\"}");
+        } finally {
+            LangfuseTraceContext.clear();
         }
 
         return ResponseEntity.status(201).body(SessionDto.Detail.from(session));

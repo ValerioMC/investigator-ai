@@ -70,6 +70,22 @@ public class GraphService {
         return repo.shortestPath(person1, person2);
     }
 
+    public Neo4jGraphRepository.PathResult personToCompanyPath(String person, String company) {
+        return repo.personToCompanyPath(person, company);
+    }
+
+    public List<String> listAllPersonNames() {
+        return repo.listAllPersonNames();
+    }
+
+    public List<String> listAllCompanyNames() {
+        return repo.listAllCompanyNames();
+    }
+
+    public List<Neo4jGraphRepository.ConflictEntry> detectConflictsInRange(String from, String to) {
+        return repo.detectConflictsInRange(from, to);
+    }
+
     // --- Ingest helpers ---
 
     public void ingestPerson(String id, String fullName, LocalDate birthDate, String nationality,

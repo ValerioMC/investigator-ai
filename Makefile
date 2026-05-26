@@ -85,10 +85,21 @@ up: check-ollama _gen-secrets
 	@echo "    Run 'make investigate' to execute the example investigation"
 	@echo ""
 
+# Bootstrap Langfuse (admin user + project + API keys) — idempotent
+seed-langfuse:
+	@bash scripts/seed-langfuse.sh
+
 # Seed Neo4j with the Ferretti corruption scenario
 seed:
-	@echo "==> Seeding data..."
+	@echo "==> Seeding graph..."
 	@bash scripts/seed-data.sh
+	@echo "==> Seeding vector documents..."
+	@curl -fsS -X POST $(WEB_URL)/api/web/v1/admin/seed-documents \
+	  -H "Content-Type: application/json" || \
+	  echo "(skipped — investigator-web not reachable on $(WEB_URL); start it and re-run 'curl -X POST $(WEB_URL)/api/web/v1/admin/seed-documents')"
+	@echo ""
+	@echo "==> Bootstrapping Langfuse..."
+	@bash scripts/seed-langfuse.sh
 
 # Fire the pre-built investigation query
 investigate:
@@ -99,14 +110,14 @@ investigate:
 	  -d '{ \
 	    "query": "Chi controlla realmente Costruzioni Ferretti Srl e ci sono conflitti di interesse con l'\''ex sindaco Luigi Conti nell'\''aggiudicazione degli appalti pubblici del Comune di Brescia nel periodo 2022-2023?", \
 	    "depth": 4, \
-	    "focusEntities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"] \
+	    "focus_entities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"] \
 	  }' | python3 -m json.tool 2>/dev/null || \
 	curl -s -X POST $(API_URL)/api/v1/investigate \
 	  -H "Content-Type: application/json" \
 	  -d '{ \
 	    "query": "Chi controlla realmente Costruzioni Ferretti Srl e ci sono conflitti di interesse con l'\''ex sindaco Luigi Conti nell'\''aggiudicazione degli appalti pubblici del Comune di Brescia nel periodo 2022-2023?", \
 	    "depth": 4, \
-	    "focusEntities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"] \
+	    "focus_entities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"] \
 	  }'
 	@echo ""
 
@@ -209,9 +220,15 @@ _gen-secrets:
 
 _wait-infra:
 	@echo "==> Waiting for infrastructure pods"
-	$(KUBECTL) rollout status deployment/neo4j    --timeout=120s
-	$(KUBECTL) rollout status deployment/qdrant   --timeout=60s
-	$(KUBECTL) rollout status deployment/postgres --timeout=60s
+	$(KUBECTL) rollout status deployment/neo4j               --timeout=120s
+	$(KUBECTL) rollout status deployment/qdrant              --timeout=60s
+	$(KUBECTL) rollout status deployment/postgres            --timeout=60s
+	$(KUBECTL) rollout status deployment/langfuse-postgres   --timeout=60s
+	$(KUBECTL) rollout status deployment/langfuse-clickhouse --timeout=120s
+	$(KUBECTL) rollout status deployment/langfuse-redis      --timeout=60s
+	$(KUBECTL) rollout status deployment/langfuse-minio      --timeout=60s
+	$(KUBECTL) rollout status deployment/langfuse            --timeout=180s
+	$(KUBECTL) rollout status deployment/langfuse-worker     --timeout=120s
 
 _wait-app:
 	@echo "==> Waiting for application pods"

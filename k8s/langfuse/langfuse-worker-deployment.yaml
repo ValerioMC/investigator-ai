@@ -1,34 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: langfuse
+  name: langfuse-worker
   namespace: investigator-ai
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: langfuse
+      app: langfuse-worker
   template:
     metadata:
       labels:
-        app: langfuse
+        app: langfuse-worker
     spec:
       containers:
-        - name: langfuse
-          image: langfuse/langfuse:3.175.0
+        - name: langfuse-worker
+          image: langfuse/langfuse-worker:3.175.0
           imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 3000
           env:
             - name: DATABASE_URL
               value: postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
-            - name: NEXTAUTH_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: investigator-secrets
-                  key: LANGFUSE_NEXTAUTH_SECRET
-            - name: NEXTAUTH_URL
-              value: http://langfuse:3000
             - name: SALT
               valueFrom:
                 secretKeyRef:
@@ -39,13 +30,11 @@ spec:
                 secretKeyRef:
                   name: investigator-secrets
                   key: LANGFUSE_ENCRYPTION_KEY
-            - name: TELEMETRY_ENABLED
-              value: "false"
-            - name: HOSTNAME
-              value: "0.0.0.0"
-            - name: NODE_OPTIONS
-              value: "--max-old-space-size=896"
-            # ClickHouse (v3 event/trace storage)
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: investigator-secrets
+                  key: LANGFUSE_NEXTAUTH_SECRET
             - name: CLICKHOUSE_MIGRATION_URL
               value: clickhouse://langfuse:langfuse@langfuse-clickhouse:9000
             - name: CLICKHOUSE_URL
@@ -54,7 +43,6 @@ spec:
               value: langfuse
             - name: CLICKHOUSE_PASSWORD
               value: langfuse
-            # Redis (v3 queue)
             - name: REDIS_CONNECTION_STRING
               value: redis://:@langfuse-redis:6379
             # S3-compatible event storage (MinIO)
@@ -82,42 +70,19 @@ spec:
               value: http://langfuse-minio:9000
             - name: LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE
               value: "true"
-            # Auto-provision org/project/admin on first start
-            - name: LANGFUSE_INIT_ORG_ID
-              value: "org-investigator-ai"
-            - name: LANGFUSE_INIT_ORG_NAME
-              value: "InvestigatorAI"
-            - name: LANGFUSE_INIT_PROJECT_ID
-              value: "proj-investigator-ai"
-            - name: LANGFUSE_INIT_PROJECT_NAME
-              value: "investigator-ai"
-            - name: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: investigator-secrets
-                  key: LANGFUSE_PUBLIC_KEY
-            - name: LANGFUSE_INIT_PROJECT_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: investigator-secrets
-                  key: LANGFUSE_SECRET_KEY
-            - name: LANGFUSE_INIT_USER_EMAIL
-              value: "admin@investigator-ai.local"
-            - name: LANGFUSE_INIT_USER_PASSWORD
-              value: "investigator"
-            - name: LANGFUSE_INIT_USER_NAME
-              value: "Admin"
+            - name: TELEMETRY_ENABLED
+              value: "false"
           resources:
             requests:
-              cpu: 250m
-              memory: 768Mi
+              cpu: 100m
+              memory: 256Mi
             limits:
-              cpu: 1000m
-              memory: 1536Mi
+              cpu: 500m
+              memory: 512Mi
           readinessProbe:
             httpGet:
-              path: /api/public/health
-              port: 3000
-            initialDelaySeconds: 30
+              path: /api/health
+              port: 3030
+            initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 6
