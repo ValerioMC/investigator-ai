@@ -37,67 +37,68 @@ public class AdminResource {
     public ResponseEntity<Map<String, Object>> seedDocuments() {
         List<Fixture> fixtures = List.of(
             new Fixture(
-                "brescia-piazza-loggia-2022.txt",
+                "brescia-loggia-square-2022.txt",
                 "news_article",
                 List.of("p-002", "c-001", "pb-001", "k-001"),
                 """
-                Brescia, 4 maggio 2022. Il Comune di Brescia ha aggiudicato a Costruzioni Ferretti Srl
-                il bando per la riqualificazione di Piazza Loggia (fase II) per un importo di
-                1.200.000 euro. La delibera è stata approvata in Consiglio comunale con il voto
-                favorevole del sindaco Luigi Conti, in carica dal 2016. Fonti interne all'amministrazione
-                segnalano che la procedura di gara ha registrato una sola offerta valida. Il sindaco
-                Conti, secondo la documentazione pubblicata sul portale istituzionale, non ha
-                segnalato l'esistenza di legami familiari con soci della catena di controllo della
-                società aggiudicataria. La Procura della Repubblica di Brescia ha avviato accertamenti
-                preliminari sulla regolarità della procedura. Costruzioni Ferretti Srl risulta
-                controllata al 100% dalla holding lussemburghese LuxHold SA.
+                Brescia, 4 May 2022. The City of Brescia awarded Ferretti Construction Ltd
+                the tender for the Loggia Square Redevelopment (Phase II) for an amount of
+                1,200,000 euros. The resolution was approved in the City Council with the
+                favourable vote of Mayor Luigi Conti, in office since 2016. Internal
+                administration sources report that the tender procedure recorded only one
+                valid bid. Mayor Conti, according to the documentation published on the
+                institutional portal, did not declare the existence of family ties with
+                shareholders in the control chain of the winning company. The Brescia
+                Public Prosecutor's Office has launched preliminary checks on the regularity
+                of the procedure. Ferretti Construction Ltd is 100% controlled by the
+                Luxembourg holding LuxHold SA.
                 """
             ),
             new Fixture(
-                "procura-brescia-ferretti-2023.txt",
+                "brescia-prosecutor-ferretti-2023.txt",
                 "court_record",
                 List.of("p-002", "p-003", "c-001", "c-002", "pb-001"),
                 """
-                Tribunale di Brescia, fascicolo n. 4471/2023. La Procura ha iscritto nel registro
-                degli indagati il dott. Luigi Conti, già sindaco del Comune di Brescia nel periodo
-                2016-2024, per ipotesi di conflitto di interessi e omessa dichiarazione di
-                partecipazioni indirette. Dagli atti emerge che il fratello dell'indagato,
-                Mario Conti, detiene una quota del 15% della holding LuxHold SA con sede in
-                Lussemburgo. LuxHold SA controlla il 100% di Costruzioni Ferretti Srl,
-                aggiudicataria di due contratti pubblici del Comune di Brescia nel biennio
-                2022-2023 per un valore complessivo di 1.650.000 euro. Il fascicolo include
-                anche elementi relativi a Esposito Offshore Ltd, società lussemburghese non
-                più attiva che figurava tra i soci della holding di controllo. La difesa
-                contesta la qualificazione del rapporto fraterno come fattispecie rilevante
-                ai fini della normativa anticorruzione.
+                Brescia Court, case file no. 4471/2023. The Public Prosecutor has registered
+                Mr Luigi Conti, former Mayor of the City of Brescia in the 2016-2024 period,
+                in the suspects register on alleged charges of conflict of interest and
+                failure to disclose indirect equity stakes. From the records it emerges that
+                the suspect's brother, Mario Conti, holds a 15% stake in the LuxHold SA
+                holding company based in Luxembourg. LuxHold SA controls 100% of Ferretti
+                Construction Ltd, awarded two public contracts by the City of Brescia in
+                the 2022-2023 biennium for a total value of 1,650,000 euros. The file also
+                includes elements relating to Esposito Offshore Ltd, a Luxembourg company
+                no longer active that featured among the shareholders of the controlling
+                holding. The defence contests the qualification of the brotherly relationship
+                as a relevant scenario for the purposes of anti-corruption legislation.
                 """
             ),
             new Fixture(
-                "conti-dichiarazione-2022.txt",
+                "conti-statement-2022.txt",
                 "official_filing",
                 List.of("p-002"),
                 """
-                Dichiarazione patrimoniale del sindaco Luigi Conti per l'anno fiscale 2022,
-                depositata il 30 giugno 2023 ai sensi dell'art. 14 del d.lgs. 33/2013.
-                Il dichiarante non riporta partecipazioni in società commerciali. Non risultano
-                indicazioni relative a quote possedute da parenti entro il secondo grado. La
-                sezione relativa ai conflitti di interesse risulta compilata con la formula
-                "nulla da dichiarare". Il documento è pubblicato sul portale Amministrazione
-                Trasparente del Comune di Brescia.
+                Asset declaration of Mayor Luigi Conti for fiscal year 2022, filed on 30 June
+                2023 pursuant to art. 14 of Legislative Decree 33/2013. The declarant reports
+                no shareholdings in commercial companies. There are no indications relating to
+                stakes held by relatives within the second degree. The section relating to
+                conflicts of interest is filled in with the formula "nothing to declare". The
+                document is published on the Transparent Administration portal of the City of
+                Brescia.
                 """
             ),
             new Fixture(
-                "luxhold-bilancio-2022.txt",
+                "luxhold-financial-statements-2022.txt",
                 "company_filing",
                 List.of("c-002", "c-001", "p-001", "p-003"),
                 """
-                LuxHold SA — Bilancio consolidato 2022 depositato presso il Registre de Commerce
-                et des Sociétés del Lussemburgo. Capitale sociale: 1.250.000 euro. Soci dichiarati:
-                Marco Ferretti (77%), Mario Conti (15%), Esposito Offshore Ltd (8%). L'unica
-                controllata operativa è Costruzioni Ferretti Srl con sede in Italia, settore
-                edilizia e opere pubbliche. Ricavi consolidati 2022: 4.300.000 euro, +38% rispetto
-                al 2021. La crescita è prevalentemente legata ai contratti pubblici aggiudicati
-                in Lombardia.
+                LuxHold SA — Consolidated financial statements 2022 filed with the Registre
+                de Commerce et des Sociétés of Luxembourg. Share capital: 1,250,000 euros.
+                Declared shareholders: Marco Ferretti (77%), Mario Conti (15%), Esposito
+                Offshore Ltd (8%). The only operating subsidiary is Ferretti Construction Ltd
+                based in Italy, construction and public works sector. Consolidated revenues
+                2022: 4,300,000 euros, +38% compared to 2021. Growth is predominantly linked
+                to public contracts awarded in Lombardy.
                 """
             )
         );

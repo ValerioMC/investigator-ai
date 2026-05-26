@@ -2,7 +2,16 @@ package ai.investigator.graph.service;
 
 import ai.investigator.graph.entity.CompanyNode;
 import ai.investigator.graph.entity.PersonNode;
-import ai.investigator.graph.repository.Neo4jGraphRepository;
+import ai.investigator.graph.projection.AssociationEntry;
+import ai.investigator.graph.projection.ConflictEntry;
+import ai.investigator.graph.projection.ContractEntry;
+import ai.investigator.graph.projection.ConvictionEntry;
+import ai.investigator.graph.projection.DocumentRef;
+import ai.investigator.graph.projection.FamilyEntry;
+import ai.investigator.graph.projection.OwnershipEntry;
+import ai.investigator.graph.projection.PathResult;
+import ai.investigator.graph.projection.TaxHavenEntry;
+import ai.investigator.graph.repository.GraphRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -10,16 +19,18 @@ import java.util.List;
 
 /**
  * High-level graph operations used by agent tools.
- * Keeps Neo4j driver details out of the agent layer.
+ * Thin facade over {@link GraphRepository} — same method names the agents already call.
  */
 @Service
 public class GraphService {
 
-    private final Neo4jGraphRepository repo;
+    private final GraphRepository repo;
 
-    public GraphService(Neo4jGraphRepository repo) {
+    public GraphService(GraphRepository repo) {
         this.repo = repo;
     }
+
+    // --- Reads ---
 
     public List<PersonNode> findUBO(String companyName) {
         return repo.findUBO(companyName);
@@ -29,49 +40,54 @@ public class GraphService {
         return repo.findCompaniesByPerson(fullName);
     }
 
-    public List<Neo4jGraphRepository.OwnershipEntry> findOwnershipChain(String companyName) {
+    public List<OwnershipEntry> findOwnershipChain(String companyName) {
         return repo.findOwnershipChain(companyName);
     }
 
-    public List<Neo4jGraphRepository.ConflictEntry> detectConflictsOfInterest(
-            String from, String to) {
-        return repo.detectConflictsOfInterest(from, to);
+    public List<ConflictEntry> detectConflictsOfInterest(String from, String to) {
+        return repo.detectConflictsOfInterest(
+            from != null ? from : "1900-01-01",
+            to   != null ? to   : "2100-01-01");
     }
 
-    public List<Neo4jGraphRepository.ConflictEntry> detectConflictsForPerson(String personName) {
+    public List<ConflictEntry> detectConflictsForPerson(String personName) {
         return repo.detectConflictsForPerson(personName);
     }
 
-    public List<Neo4jGraphRepository.TaxHavenEntry> findTaxHavenConnections(String personName) {
+    public List<ConflictEntry> detectConflictsInRange(String from, String to) {
+        return repo.detectConflictsInRange(from, to);
+    }
+
+    public List<TaxHavenEntry> findTaxHavenConnections(String personName) {
         return repo.findTaxHavenConnections(personName);
     }
 
-    public List<Neo4jGraphRepository.FamilyEntry> findFamilyNetwork(String personName) {
+    public List<FamilyEntry> findFamilyNetwork(String personName) {
         return repo.findFamilyNetwork(personName);
     }
 
-    public List<Neo4jGraphRepository.AssociationEntry> findAssociatedPersons(String personName) {
+    public List<AssociationEntry> findAssociatedPersons(String personName) {
         return repo.findAssociatedPersons(personName);
     }
 
-    public List<Neo4jGraphRepository.ConvictionEntry> findConvictions(String personName) {
+    public List<ConvictionEntry> findConvictions(String personName) {
         return repo.findConvictions(personName);
     }
 
-    public List<Neo4jGraphRepository.ContractEntry> findContractsWonByCompany(String companyName) {
+    public List<ContractEntry> findContractsWonByCompany(String companyName) {
         return repo.findContractsWonByCompany(companyName);
     }
 
-    public List<Neo4jGraphRepository.DocumentRef> findDocumentsForPerson(String personName) {
+    public List<DocumentRef> findDocumentsForPerson(String personName) {
         return repo.findDocumentsForPerson(personName);
     }
 
-    public Neo4jGraphRepository.PathResult shortestPath(String person1, String person2) {
-        return repo.shortestPath(person1, person2);
+    public PathResult shortestPath(String person1, String person2) {
+        return repo.shortestPath(person1, person2).orElse(null);
     }
 
-    public Neo4jGraphRepository.PathResult personToCompanyPath(String person, String company) {
-        return repo.personToCompanyPath(person, company);
+    public PathResult personToCompanyPath(String person, String company) {
+        return repo.personToCompanyPath(person, company).orElse(null);
     }
 
     public List<String> listAllPersonNames() {
@@ -82,21 +98,20 @@ public class GraphService {
         return repo.listAllCompanyNames();
     }
 
-    public List<Neo4jGraphRepository.ConflictEntry> detectConflictsInRange(String from, String to) {
-        return repo.detectConflictsInRange(from, to);
-    }
-
-    // --- Ingest helpers ---
+    // --- Ingest ---
 
     public void ingestPerson(String id, String fullName, LocalDate birthDate, String nationality,
                               String taxCode, String politicalRole, Double riskScore) {
-        repo.mergePerson(id, fullName, birthDate, nationality, taxCode, politicalRole, riskScore);
+        repo.mergePerson(id, fullName,
+            birthDate != null ? birthDate.toString() : null,
+            nationality, taxCode, politicalRole, riskScore);
     }
 
     public void ingestCompany(String id, String name, String registrationNumber,
                                String jurisdiction, String legalForm, boolean active,
                                String vatNumber, String sector) {
-        repo.mergeCompany(id, name, registrationNumber, jurisdiction, legalForm, active, vatNumber, sector);
+        repo.mergeCompany(id, name, registrationNumber, jurisdiction, legalForm, active,
+            vatNumber, sector);
     }
 
     public void ingestContract(String id, String title, double amount, String awardedAt,

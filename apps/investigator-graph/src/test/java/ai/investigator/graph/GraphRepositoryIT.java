@@ -1,61 +1,59 @@
 package ai.investigator.graph;
 
-import ai.investigator.graph.repository.Neo4jGraphRepository;
+import ai.investigator.graph.repository.GraphRepository;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.neo4j.driver.AuthTokens;
+import org.junit.jupiter.api.TestInstance;
 import org.neo4j.driver.Driver;
-import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Session;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests the Cypher queries against a real Neo4j instance.
- * Fixtures: 2 persons, 3 companies, 2 contracts, 1 public body, 1 jurisdiction.
- * Conflict scenario: Marco Ferretti held public role at Comune di Brescia,
- * which issued a contract awarded to Costruzioni Ferretti Srl — which he owns 60%.
+ * Runs the Cypher in {@link GraphRepository} against a real Neo4j 5 instance.
+ * Boot 4 dropped the @DataNeo4jTest slice, so we boot a tiny app scoped to
+ * this package and let SDN autoconfig + repository scanning do the rest.
  */
 @Testcontainers
+@SpringBootTest(classes = GraphRepositoryIT.TestApp.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class GraphRepositoryIT {
+
+    @SpringBootApplication
+    static class TestApp {}
 
     @Container
     static Neo4jContainer<?> neo4j = new Neo4jContainer<>(DockerImageName.parse("neo4j:5.26-community"))
         .withoutAuthentication();
 
-    static Neo4jGraphRepository repo;
-    static Driver driver;
-
-    @BeforeAll
-    static void setup() {
-        driver = GraphDatabase.driver(neo4j.getBoltUrl(), AuthTokens.none());
-        repo = new Neo4jGraphRepository();
-        // inject driver via reflection — acceptable in test scope
-        try {
-            var f = Neo4jGraphRepository.class.getDeclaredField("driver");
-            f.setAccessible(true);
-            f.set(repo, driver);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        loadFixtures();
+    @DynamicPropertySource
+    static void neo4jProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.neo4j.uri", neo4j::getBoltUrl);
+        registry.add("spring.neo4j.authentication.username", () -> "neo4j");
+        registry.add("spring.neo4j.authentication.password", () -> "");
     }
 
-    static void loadFixtures() {
+    @Autowired GraphRepository repo;
+    @Autowired Driver driver;
+
+    @BeforeAll
+    void loadFixtures() {
         try (Session s = driver.session()) {
-            // Persons
+            s.run("MATCH (n) DETACH DELETE n");
             s.run("""
                 CREATE (p1:Person {id:'p1', fullName:'Marco Ferretti', nationality:'IT',
                     politicalRole:'Consigliere comunale', riskScore: 0.8})
                 CREATE (p2:Person {id:'p2', fullName:'Giulia Morandi', nationality:'IT'})
 
-                // Companies
                 CREATE (c1:Company {id:'c1', name:'Costruzioni Ferretti Srl',
                     jurisdiction:'IT', legalForm:'Srl', active:true})
                 CREATE (c2:Company {id:'c2', name:'LuxHold SA',
@@ -63,15 +61,12 @@ class GraphRepositoryIT {
                 CREATE (c3:Company {id:'c3', name:'Edilizia Morandi SpA',
                     jurisdiction:'IT', legalForm:'SpA', active:true})
 
-                // Jurisdiction
                 CREATE (j1:Jurisdiction {id:'j1', name:'Luxembourg', isoCode:'LU',
                     taxHaven:true, euMember:true})
 
-                // Public body
                 CREATE (pb:PublicBody {id:'pb1', name:'Comune di Brescia',
                     level:'MUNICIPAL', country:'IT'})
 
-                // Contracts
                 CREATE (ct1:Contract {id:'ct1', title:'Riqualificazione Piazza Loggia',
                     amount:1200000.0, awardedAt:date('2021-03-15'),
                     publicBodyName:'Comune di Brescia', source:'ANAC'})
@@ -79,7 +74,6 @@ class GraphRepositoryIT {
                     amount:450000.0, awardedAt:date('2022-07-01'),
                     publicBodyName:'Comune di Brescia', source:'ANAC'})
 
-                // Relationships
                 CREATE (p1)-[:OWNS {sharePercent:60.0, directOrIndirect:'DIRECT'}]->(c1)
                 CREATE (p2)-[:OWNS {sharePercent:100.0, directOrIndirect:'DIRECT'}]->(c3)
                 CREATE (c2)-[:CONTROLS {mechanism:'MAJORITY_SHARE', sharePercent:51.0}]->(c1)
@@ -98,25 +92,24 @@ class GraphRepositoryIT {
     void findUBO_shouldReturnPersonsOwningCompany() {
         var result = repo.findUBO("Costruzioni Ferretti Srl");
         assertThat(result).isNotEmpty();
-        var names = result.stream().map(p -> p.fullName()).toList();
-        assertThat(names).contains("Marco Ferretti");
+        assertThat(result.stream().map(p -> p.fullName()).toList())
+            .contains("Marco Ferretti");
     }
 
     @Test
     void findCompaniesByPerson_shouldReturnAllControlledCompanies() {
         var companies = repo.findCompaniesByPerson("Marco Ferretti");
         assertThat(companies).isNotEmpty();
-        var names = companies.stream().map(c -> c.name()).toList();
-        assertThat(names).contains("Costruzioni Ferretti Srl");
+        assertThat(companies.stream().map(c -> c.name()).toList())
+            .contains("Costruzioni Ferretti Srl");
     }
 
     @Test
     void detectConflictsOfInterest_shouldDetectFerretti() {
         var conflicts = repo.detectConflictsOfInterest("2020-01-01", "2023-12-31");
         assertThat(conflicts).isNotEmpty();
-        var persons = conflicts.stream().map(c -> c.person()).toList();
-        assertThat(persons).contains("Marco Ferretti");
-        // both contracts should appear
+        assertThat(conflicts.stream().map(c -> c.person()).toList())
+            .contains("Marco Ferretti");
         assertThat(conflicts).hasSizeGreaterThanOrEqualTo(2);
     }
 
@@ -131,20 +124,10 @@ class GraphRepositoryIT {
     }
 
     @Test
-    void findTaxHavenConnections_shouldFindLuxembourg() {
-        // LuxHold SA controls Costruzioni Ferretti — but Ferretti doesn't directly own LuxHold
-        // This test verifies the query works; result may be empty given fixture shape
-        var result = repo.findTaxHavenConnections("Marco Ferretti");
-        // The query follows OWNS|CONTROLS — Ferretti->OWNS->c1<-CONTROLS-LuxHold->REGISTERED_IN->LU
-        // Direction matters: Ferretti doesn't own LuxHold, so expect empty here — correct behavior
-        assertThat(result).isNotNull();
-    }
-
-    @Test
     void findContractsWonByCompany_shouldReturnBothContracts() {
         var contracts = repo.findContractsWonByCompany("Costruzioni Ferretti Srl");
         assertThat(contracts).hasSize(2);
-        double totalAmount = contracts.stream().mapToDouble(c -> c.amount()).sum();
-        assertThat(totalAmount).isEqualTo(1650000.0);
+        double total = contracts.stream().mapToDouble(c -> c.amount()).sum();
+        assertThat(total).isEqualTo(1650000.0);
     }
 }

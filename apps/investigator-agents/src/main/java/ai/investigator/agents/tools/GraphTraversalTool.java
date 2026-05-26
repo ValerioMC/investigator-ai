@@ -1,8 +1,7 @@
 package ai.investigator.agents.tools;
 
-import ai.investigator.graph.repository.Neo4jGraphRepository.ConflictEntry;
-import ai.investigator.graph.repository.Neo4jGraphRepository.ConvictionEntry;
-import ai.investigator.graph.repository.Neo4jGraphRepository.OwnershipEntry;
+import ai.investigator.graph.projection.ConflictEntry;
+import ai.investigator.graph.projection.OwnershipEntry;
 import ai.investigator.graph.service.GraphService;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
