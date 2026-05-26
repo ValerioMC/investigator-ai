@@ -12,8 +12,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Calls Ollama's embedding API (/api/embeddings) to produce float vectors.
- * Model is configurable — default is nomic-embed-text (768 dims).
+ * Embeds text via the OpenAI-compatible /v1/embeddings endpoint.
+ * Default backend: mlx-embeddings FastAPI server (see environment/mlx/embed_server.py)
+ * serving a ModernBERT/Nomic model — 768-dim output.
  */
 @Component
 public class EmbeddingService {
@@ -30,11 +31,11 @@ public class EmbeddingService {
         try {
             String body = mapper.writeValueAsString(Map.of(
                 "model", config.getEmbeddingModel(),
-                "prompt", text
+                "input", text
             ));
 
             HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(config.getOllamaBaseUrl() + "/api/embeddings"))
+                .uri(URI.create(config.getEmbeddingBaseUrl() + "/embeddings"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
@@ -42,13 +43,18 @@ public class EmbeddingService {
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
 
             if (resp.statusCode() != 200) {
-                throw new EmbeddingException("Ollama returned " + resp.statusCode() + ": " + resp.body());
+                throw new EmbeddingException("Embedding server returned " + resp.statusCode() + ": " + resp.body());
             }
 
             @SuppressWarnings("unchecked")
             var root = (Map<String, Object>) mapper.readValue(resp.body(), Map.class);
             @SuppressWarnings("unchecked")
-            List<Number> embedding = (List<Number>) root.get("embedding");
+            var data = (List<Map<String, Object>>) root.get("data");
+            if (data == null || data.isEmpty()) {
+                throw new EmbeddingException("Embedding response had no data: " + resp.body());
+            }
+            @SuppressWarnings("unchecked")
+            List<Number> embedding = (List<Number>) data.get(0).get("embedding");
 
             return embedding.stream().map(Number::floatValue).toList();
         } catch (EmbeddingException e) {

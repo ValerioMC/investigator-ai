@@ -8,8 +8,8 @@ public class QdrantConfig {
     private String host;
     private int port = 6333;
     private String defaultCollection = "documents";
-    private String embeddingModel = "nomic-embed-text";
-    private String ollamaBaseUrl = "http://localhost:11434";
+    private String embeddingModel = "mlx-community/nomicai-modernbert-embed-base-bf16";
+    private String embeddingBaseUrl = "http://host.minikube.internal:8082/v1";
 
     public String getHost() { return host; }
     public void setHost(String host) { this.host = host; }
@@ -23,6 +23,6 @@ public class QdrantConfig {
     public String getEmbeddingModel() { return embeddingModel; }
     public void setEmbeddingModel(String embeddingModel) { this.embeddingModel = embeddingModel; }
 
-    public String getOllamaBaseUrl() { return ollamaBaseUrl; }
-    public void setOllamaBaseUrl(String ollamaBaseUrl) { this.ollamaBaseUrl = ollamaBaseUrl; }
+    public String getEmbeddingBaseUrl() { return embeddingBaseUrl; }
+    public void setEmbeddingBaseUrl(String embeddingBaseUrl) { this.embeddingBaseUrl = embeddingBaseUrl; }
 }

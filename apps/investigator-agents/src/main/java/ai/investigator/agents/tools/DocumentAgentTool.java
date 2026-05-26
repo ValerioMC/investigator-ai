@@ -21,10 +21,15 @@ public class DocumentAgentTool {
           "court records, company filings, and leaked documents. " +
           "Use to find documentary evidence supporting or contradicting a claim.")
     public String searchDocuments(
-            @P("Query describing what documentary evidence to find, e.g. 'Court records mentioning Luigi Conti'")
-            String query) {
+            @P("Query describing what documentary evidence to find") String query) {
         log.warn("[DOCUMENT-TOOL] called for: {}", query);
-        String result = vector.searchDocuments(query);
+        String result;
+        try {
+            result = vector.searchDocuments(query);
+        } catch (Exception e) {
+            log.error("[DOCUMENT-TOOL] searchDocuments threw {}: {}", e.getClass().getSimpleName(), e.getMessage(), e);
+            result = "searchDocuments unavailable (" + e.getClass().getSimpleName() + ")";
+        }
         log.warn("[DOCUMENT-TOOL] result: {}", result);
         return result;
     }

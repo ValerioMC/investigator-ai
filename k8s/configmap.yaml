@@ -11,4 +11,8 @@ data:
   LANGFUSE_BASE_URL: http://langfuse:3000
   POSTGRES_URL: jdbc:postgresql://postgres:5432/investigator
   POSTGRES_USER: investigator
-  OLLAMA_BASE_URL: http://host.docker.internal:11434
+  # MLX servers run on the macOS host. host.minikube.internal resolves to the host inside Minikube.
+  MLX_BASE_URL: http://host.minikube.internal:8081/v1
+  MLX_MODEL_ID: mlx-community/Qwen3.6-35B-A3B-4bit
+  EMBED_BASE_URL: http://host.minikube.internal:8082/v1
+  EMBED_MODEL_ID: mlx-community/nomicai-modernbert-embed-base-bf16

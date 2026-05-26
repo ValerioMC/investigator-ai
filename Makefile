@@ -12,7 +12,7 @@ WEB_URL    := http://localhost:8090
 
 .PHONY: help up down build deploy infra seed investigate \
         port-forward stop-forward status logs-api logs-web k9s \
-        check-ollama _gen-secrets _wait-infra _wait-app
+        check-mlx _gen-secrets _wait-infra _wait-app
 
 # ---------------------------------------------------------------
 # Public targets
@@ -22,7 +22,7 @@ help:
 	@echo ""
 	@echo "InvestigatorAI"
 	@echo ""
-	@echo "  make up           full setup: ollama check + minikube + infra + build + deploy + port-forward"
+	@echo "  make up           full setup: mlx check + minikube + infra + build + deploy + port-forward"
 	@echo "  make seed         populate Neo4j with the Ferretti investigation scenario"
 	@echo "  make investigate  run the example query against the seeded data"
 	@echo "  make down         delete minikube profile (destroys all data)"
@@ -38,7 +38,7 @@ help:
 	@echo ""
 
 # Full one-shot setup
-up: check-ollama _gen-secrets
+up: check-mlx _gen-secrets
 	@echo "==> Starting minikube (profile: $(PROFILE))"
 	minikube start \
 	  --profile $(PROFILE) \
@@ -192,28 +192,24 @@ k9s:
 # Internal helpers
 # ---------------------------------------------------------------
 
-check-ollama:
-	@command -v ollama > /dev/null 2>&1 || { \
+# Verifica che i due server MLX (chat + embeddings) rispondano sull'host macOS.
+# I server vengono gestiti da environment/mlx/Makefile (`make server` / `make embed-server`).
+check-mlx:
+	@curl -sf http://localhost:8081/v1/models > /dev/null 2>&1 || { \
 	  echo ""; \
-	  echo "ERROR: ollama not installed."; \
-	  echo "  brew install ollama"; \
-	  echo "  — or — https://ollama.com/download"; \
+	  echo "ERROR: MLX chat server not reachable on http://localhost:8081"; \
+	  echo "  cd environment/mlx && make server"; \
 	  echo ""; \
 	  exit 1; \
 	}
-	@curl -sf http://localhost:11434/api/tags > /dev/null 2>&1 || { \
-	  echo "==> Starting ollama server..."; \
-	  ollama serve > /dev/null 2>&1 & sleep 3; \
+	@curl -sf http://localhost:8082/v1/models > /dev/null 2>&1 || { \
+	  echo ""; \
+	  echo "ERROR: MLX embedding server not reachable on http://localhost:8082"; \
+	  echo "  cd environment/mlx && make embed-server"; \
+	  echo ""; \
+	  exit 1; \
 	}
-	@ollama list 2>/dev/null | grep -q "qwen3.6:35b" || { \
-	  echo "==> Pulling qwen3.6:35b (~24 GB, one-time download)..."; \
-	  ollama pull qwen3.6:35b; \
-	}
-	@ollama list 2>/dev/null | grep -q "nomic-embed-text" || { \
-	  echo "==> Pulling nomic-embed-text (embedding model, ~270 MB)..."; \
-	  ollama pull nomic-embed-text; \
-	}
-	@echo "    Ollama ready: qwen3.6:35b + nomic-embed-text"
+	@echo "    MLX ready: chat (8081) + embeddings (8082)"
 
 _gen-secrets:
 	@bash scripts/gen-secrets.sh

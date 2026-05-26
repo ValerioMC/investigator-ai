@@ -1,7 +1,7 @@
 package ai.investigator.web.resource;
 
 import ai.investigator.agents.observability.LangfuseTraceContext;
-import ai.investigator.agents.supervisor.InvestigationOrchestrator;
+import ai.investigator.agents.supervisor.SupervisorAgent;
 import ai.investigator.web.dto.SessionDto;
 import ai.investigator.web.entity.InvestigationSession;
 import ai.investigator.web.entity.InvestigationSession.Status;
@@ -30,17 +30,17 @@ public class SessionResource {
     private static final UUID DEFAULT_WORKSPACE =
         UUID.fromString("00000000-0000-0000-0000-000000000001");
 
-    private final InvestigationOrchestrator orchestrator;
+    private final SupervisorAgent supervisor;
     private final ObjectMapper mapper = new ObjectMapper();
     private final InvestigationSessionRepository sessions;
     private final WorkspaceRepository workspaces;
     private final AuditLogService auditLog;
 
-    public SessionResource(InvestigationOrchestrator orchestrator,
+    public SessionResource(SupervisorAgent supervisor,
                             InvestigationSessionRepository sessions,
                             WorkspaceRepository workspaces,
                             AuditLogService auditLog) {
-        this.orchestrator = orchestrator;
+        this.supervisor = supervisor;
         this.sessions = sessions;
         this.workspaces = workspaces;
         this.auditLog = auditLog;
@@ -73,7 +73,7 @@ public class SessionResource {
         LangfuseTraceContext.setSession(session.id.toString());
         LangfuseTraceContext.setUser(DEFAULT_WORKSPACE.toString());
         try {
-            String rawText = orchestrator.investigate(req.query(), req.focusEntities());
+            String rawText = supervisor.investigate(buildPrompt(req));
             String rawReport = extractJson(rawText);
             if (rawReport == null) {
                 log.warn("LLM did not return valid JSON for session {}", session.id);
@@ -87,6 +87,7 @@ public class SessionResource {
                 "SESSION", session.id.toString(), null);
         } catch (Exception e) {
             String errMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            log.error("Investigation failed for session {}: {}", session.id, errMsg, e);
             session = failSession(session.id, errMsg);
             auditLog.log(DEFAULT_WORKSPACE, null, "INVESTIGATION_FAILED",
                 "SESSION", session.id.toString(),
@@ -152,6 +153,14 @@ public class SessionResource {
         s.errorMessage = errMsg;
         s.completedAt = OffsetDateTime.now();
         return sessions.save(s);
+    }
+
+    private String buildPrompt(SessionDto.CreateRequest req) {
+        var sb = new StringBuilder("USER QUERY: ").append(req.query());
+        if (req.focusEntities() != null && !req.focusEntities().isEmpty()) {
+            sb.append("\nFOCUS ENTITIES: ").append(String.join(", ", req.focusEntities()));
+        }
+        return sb.toString();
     }
 
     private int countByConfidence(com.fasterxml.jackson.databind.JsonNode findings, String level) {

@@ -26,9 +26,9 @@ class CorporateAgentTest {
             - Remaining 0.0%: fully accounted
             """;
 
-        when(corporateAgent.synthesize(anyString())).thenReturn(mockResponse);
+        when(corporateAgent.analyze(anyString())).thenReturn(mockResponse);
 
-        String result = corporateAgent.synthesize(
+        String result = corporateAgent.analyze(
             "Who owns Costruzioni Ferretti Srl and are there any tax haven connections?");
 
         assertThat(result).contains("LuxHold SA");

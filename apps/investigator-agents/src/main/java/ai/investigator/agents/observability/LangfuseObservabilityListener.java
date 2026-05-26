@@ -21,16 +21,12 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Bridges LangChain4j {@code ChatModelListener} events into Langfuse ingestion
- * events.
+ * Maps every LangChain4j chat-model call to a Langfuse trace+generation pair.
  *
- * <p>If a parent traceId is present in {@link LangfuseTraceContext}, the
- * listener attaches each LLM call as a {@code generation} observation under
- * that trace (and optionally as a child of a span the orchestrator opened) —
- * the orchestrator owns the umbrella trace lifecycle.
- *
- * <p>If no parent traceId is set, the listener falls back to creating its own
- * one-off trace per LLM call (backwards-compatible behaviour).
+ * <p>Each LLM call is its own standalone trace. Calls belonging to the same
+ * investigation are grouped via {@code sessionId} (set by the resource layer
+ * through {@link LangfuseTraceContext}), so the Langfuse Sessions tab shows
+ * Supervisor + every subagent invocation under one entry.
  */
 @Component
 @ConditionalOnProperty(prefix = "langfuse", name = "enabled", havingValue = "true")
@@ -38,34 +34,26 @@ public class LangfuseObservabilityListener implements ChatModelListener {
 
     private static final Logger log = LoggerFactory.getLogger(LangfuseObservabilityListener.class);
 
-    private static final String TRACE_ID      = "lf.traceId";
-    private static final String GEN_ID        = "lf.genId";
-    private static final String START_KEY     = "lf.startTime";
-    private static final String SESSION_ID    = "lf.sessionId";
-    private static final String USER_ID       = "lf.userId";
-    private static final String PARENT_TRACE  = "lf.parentTrace";
-    private static final String PARENT_OBS    = "lf.parentObservation";
+    private static final String TRACE_ID = "lf.traceId";
+    private static final String GEN_ID = "lf.genId";
+    private static final String START_KEY = "lf.startTime";
+    private static final String SESSION_ID = "lf.sessionId";
+    private static final String USER_ID = "lf.userId";
 
     private final LangfuseClient client;
 
     public LangfuseObservabilityListener(LangfuseClient client) {
         this.client = client;
-        log.info("Langfuse tracing enabled via LangfuseClient");
+        log.info("Langfuse tracing enabled (per-call trace mode)");
     }
 
     @Override
     public void onRequest(ChatModelRequestContext ctx) {
-        // Capture per-thread context now, because onResponse will run on a
-        // virtual thread that doesn't inherit ThreadLocals.
-        String parentTrace = LangfuseTraceContext.parentTrace();
-        String parentObs   = LangfuseTraceContext.parentObservation();
-
-        ctx.attributes().put(TRACE_ID,  parentTrace != null ? parentTrace : UUID.randomUUID().toString());
-        ctx.attributes().put(GEN_ID,    UUID.randomUUID().toString());
+        // Capture ThreadLocal values here — onResponse runs on a virtual thread
+        // that does not inherit ThreadLocals.
+        ctx.attributes().put(TRACE_ID, UUID.randomUUID().toString());
+        ctx.attributes().put(GEN_ID, UUID.randomUUID().toString());
         ctx.attributes().put(START_KEY, Instant.now());
-        if (parentTrace != null) ctx.attributes().put(PARENT_TRACE, Boolean.TRUE);
-        if (parentObs   != null) ctx.attributes().put(PARENT_OBS, parentObs);
-
         var sid = LangfuseTraceContext.session();
         if (sid != null) ctx.attributes().put(SESSION_ID, sid);
         var uid = LangfuseTraceContext.user();
@@ -85,20 +73,28 @@ public class LangfuseObservabilityListener implements ChatModelListener {
 
         var agentName = resolveAgentName(req.messages());
         var userInput = extractUserInput(req.messages());
-        var output    = resp.aiMessage() != null ? resp.aiMessage().text() : "";
+        // text() returns null when the assistant message contains only tool_calls
+        var output    = (resp.aiMessage() != null && resp.aiMessage().text() != null) ? resp.aiMessage().text() : "";
         var usage     = resp.tokenUsage();
         var model     = resp.modelName() != null ? resp.modelName()
-                        : req.modelName() != null ? req.modelName() : "ollama";
+                        : req.modelName() != null ? req.modelName() : "mlx";
 
-        var sessionId   = (String)  ctx.attributes().get(SESSION_ID);
-        var userId      = (String)  ctx.attributes().get(USER_ID);
-        var parentObs   = (String)  ctx.attributes().get(PARENT_OBS);
-        boolean nested  = Boolean.TRUE.equals(ctx.attributes().get(PARENT_TRACE));
+        var sessionId = (String) ctx.attributes().get(SESSION_ID);
+        var userId    = (String) ctx.attributes().get(USER_ID);
+
+        var traceBody = new LinkedHashMap<String, Object>();
+        traceBody.put("id", traceId);
+        traceBody.put("name", agentName);
+        traceBody.put("timestamp", startTime.toString());
+        traceBody.put("input", userInput);
+        traceBody.put("output", output);
+        traceBody.put("tags", List.of("investigator-ai", agentName));
+        if (sessionId != null) traceBody.put("sessionId", sessionId);
+        if (userId != null)    traceBody.put("userId", userId);
 
         var genBody = new LinkedHashMap<String, Object>();
         genBody.put("id", genId);
         genBody.put("traceId", traceId);
-        if (parentObs != null) genBody.put("parentObservationId", parentObs);
         genBody.put("name", agentName);
         genBody.put("startTime", startTime.toString());
         genBody.put("endTime", endTime.toString());
@@ -112,45 +108,25 @@ public class LangfuseObservabilityListener implements ChatModelListener {
                 "total",  usage.totalTokenCount()
             ));
         }
-        var generationEvent = event("generation-create", startTime, genBody);
 
-        if (nested) {
-            // Parent trace is owned by the orchestrator — only emit the generation.
-            client.postEvents(List.of(generationEvent));
-        } else {
-            // Fallback: create a standalone trace per LLM call.
-            var traceBody = new LinkedHashMap<String, Object>();
-            traceBody.put("id", traceId);
-            traceBody.put("name", agentName);
-            traceBody.put("timestamp", startTime.toString());
-            traceBody.put("input", userInput);
-            traceBody.put("output", output);
-            traceBody.put("tags", List.of("investigator-ai", agentName));
-            if (sessionId != null) traceBody.put("sessionId", sessionId);
-            if (userId != null)    traceBody.put("userId", userId);
-            client.postEvents(List.of(
-                event("trace-create", startTime, traceBody),
-                generationEvent
-            ));
-        }
+        client.postEvents(List.of(
+            event("trace-create", startTime, traceBody),
+            event("generation-create", startTime, genBody)
+        ));
     }
 
     @Override
     public void onError(ChatModelErrorContext ctx) {
         var traceId = (String) ctx.attributes().get(TRACE_ID);
         if (traceId == null) return;
-        boolean nested = Boolean.TRUE.equals(ctx.attributes().get(PARENT_TRACE));
-        if (nested) {
-            // Don't pollute the umbrella trace; the orchestrator will record the failure.
-            log.warn("LLM call failed under parent trace {}: {}", traceId, ctx.error().getMessage());
-            return;
-        }
         var body = new LinkedHashMap<String, Object>();
         body.put("id", traceId);
-        body.put("name", "investigator-ai");
+        body.put("name", "LLMCall");
         body.put("timestamp", Instant.now().toString());
         body.put("level", "ERROR");
         body.put("statusMessage", ctx.error().getMessage());
+        var sid = (String) ctx.attributes().get(SESSION_ID);
+        if (sid != null) body.put("sessionId", sid);
         client.postEvents(List.of(event("trace-create", Instant.now(), body)));
     }
 
@@ -165,8 +141,7 @@ public class LangfuseObservabilityListener implements ChatModelListener {
                     if (text.contains("financial forensics"))             return "FinancialFlowAgent";
                     if (text.contains("document intelligence"))           return "DocumentAgent";
                     if (text.contains("source verification"))             return "SourceVerificationAgent";
-                    if (text.contains("investigative journalism report writer") ||
-                        text.contains("investigative journalism supervisor")) return "SupervisorAgent";
+                    if (text.contains("investigative journalism supervisor")) return "SupervisorAgent";
                     return "UnknownAgent";
                 })
                 .orElse("LLMCall");

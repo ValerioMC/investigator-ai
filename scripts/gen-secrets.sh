@@ -40,7 +40,7 @@ with open('k8s/secret.yaml.template') as f:
 for k, v in vals.items():
     content = content.replace(k + ': Q0hBTkdFX01F', k + ': ' + v)
 
-# drop ANTHROPIC_API_KEY — not needed with local Ollama
+# drop ANTHROPIC_API_KEY — not needed with local MLX
 lines = [l for l in content.splitlines() if 'ANTHROPIC_API_KEY' not in l]
 with open('k8s/secret.yaml', 'w') as f:
     f.write('\n'.join(lines) + '\n')

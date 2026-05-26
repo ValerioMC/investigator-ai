@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 /**
  * Spins up a real Qdrant container and verifies indexing + search.
  * Uses a mocked EmbeddingService that returns deterministic vectors
- * so the test doesn't require Ollama.
+ * so the test doesn't require the MLX embedding server.
  */
 @Testcontainers
 class VectorRepositoryIT {
@@ -44,8 +44,8 @@ class VectorRepositoryIT {
             public String host() { return qdrant.getHost(); }
             public int port() { return qdrant.getMappedPort(6333); }
             public String defaultCollection() { return "test_docs"; }
-            public String embeddingModel() { return "nomic-embed-text"; }
-            public String ollamaBaseUrl() { return "http://localhost:11434"; }
+            public String embeddingModel() { return "mlx-community/nomicai-modernbert-embed-base-bf16"; }
+            public String embeddingBaseUrl() { return "http://localhost:8082/v1"; }
         };
 
         // mock embedder — returns a deterministic 768-dim vector based on text hash

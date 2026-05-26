@@ -6,5 +6,5 @@ import dev.langchain4j.service.UserMessage;
 public interface FinancialFlowAgent {
 
     @SystemMessage(fromResource = "prompts/FinancialFlowAgent-system.txt")
-    String synthesize(@UserMessage String payload);
+    String analyze(@UserMessage String request);
 }

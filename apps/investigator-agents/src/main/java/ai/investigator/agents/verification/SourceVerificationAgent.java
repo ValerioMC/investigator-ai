@@ -6,5 +6,5 @@ import dev.langchain4j.service.UserMessage;
 public interface SourceVerificationAgent {
 
     @SystemMessage(fromResource = "prompts/SourceVerificationAgent-system.txt")
-    String synthesize(@UserMessage String payload);
+    String analyze(@UserMessage String request);
 }

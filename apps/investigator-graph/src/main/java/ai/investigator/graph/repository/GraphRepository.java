@@ -38,16 +38,26 @@ public interface GraphRepository extends Neo4jRepository<PersonNode, String> {
     // Reads — ownership / UBO
     // -----------------------------------------------------------------
 
+    // SDN 8 routes RETURN DISTINCT <node> through DtoInstantiatingConverter, which
+    // tries to bind RETURN aliases to record components and crashes with all-nulls
+    // when the alias is the bare node name. Returning each property explicitly with
+    // its constructor-parameter alias makes the projection deterministic.
     @Query("""
         MATCH path = (p:Person)-[:OWNS|CONTROLS*1..5]->(c:Company {name: $companyName})
-        RETURN DISTINCT p
-        ORDER BY length(path)
+        WITH p, min(length(path)) AS hops
+        RETURN p.id AS id, p.fullName AS fullName, p.birthDate AS birthDate,
+               p.nationality AS nationality, p.taxCode AS taxCode,
+               p.politicalRole AS politicalRole, p.riskScore AS riskScore
+        ORDER BY hops
         """)
     List<PersonNode> findUBO(@Param("companyName") String companyName);
 
     @Query("""
         MATCH (p:Person {fullName: $fullName})-[:OWNS|IS_DIRECTOR_OF|CONTROLS*1..4]->(c:Company)
-        RETURN DISTINCT c
+        RETURN DISTINCT c.id AS id, c.name AS name, c.registrationNumber AS registrationNumber,
+                        c.jurisdiction AS jurisdiction, c.legalForm AS legalForm,
+                        coalesce(c.active, true) AS active,
+                        c.vatNumber AS vatNumber, c.sector AS sector
         """)
     List<CompanyNode> findCompaniesByPerson(@Param("fullName") String fullName);
 

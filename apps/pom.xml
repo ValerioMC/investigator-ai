@@ -81,11 +81,13 @@
         <version>${project.version}</version>
       </dependency>
 
-      <!-- Neo4j — pinned to cached version; tcnative excluded (not needed for plain Bolt) -->
+      <!-- Neo4j — pinned to 6.0.5 (Spring Boot 4 managed version, has GqlNotification
+           class required by Spring Data Neo4j 8.0.5). tcnative excluded — plain Bolt
+           doesn't need native SSL. -->
       <dependency>
         <groupId>org.neo4j.driver</groupId>
         <artifactId>neo4j-java-driver</artifactId>
-        <version>5.26.0</version>
+        <version>6.0.5</version>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>

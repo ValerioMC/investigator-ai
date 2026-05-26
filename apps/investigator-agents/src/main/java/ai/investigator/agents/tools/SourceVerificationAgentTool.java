@@ -22,11 +22,15 @@ public class SourceVerificationAgentTool {
     @Tool("Cross-reference a specific claim against graph data and documents. " +
           "Returns evidence found in the database. Confidence must be assigned by the calling agent based on what is returned.")
     public String verifyClaim(
-            @P("The specific claim to verify, e.g. 'Luigi Conti voted on contracts awarding €1.2M to a company his brother owns'")
-            String claim) {
+            @P("The specific claim to verify, phrased as a single sentence") String claim) {
         log.warn("[VERIFY-TOOL] verifying claim: {}", claim);
-        // Search vector store for documents related to the claim
-        String docs = vector.searchDocuments(claim);
+        String docs;
+        try {
+            docs = vector.searchDocuments(claim);
+        } catch (Exception e) {
+            log.error("[VERIFY-TOOL] searchDocuments threw {}: {}", e.getClass().getSimpleName(), e.getMessage(), e);
+            docs = "searchDocuments unavailable (" + e.getClass().getSimpleName() + ")";
+        }
         String result = "DOCUMENT EVIDENCE:\n" + docs;
         log.warn("[VERIFY-TOOL] result: {}", result);
         return result;

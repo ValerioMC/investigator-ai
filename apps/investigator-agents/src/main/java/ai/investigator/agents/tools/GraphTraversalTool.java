@@ -119,8 +119,8 @@ public class GraphTraversalTool {
           "contracts (or whose family members did). Provide date range as ISO-8601.")
     public String detectConflictOfInterest(
             @P("Full name of person to check, or null to scan all") String personName,
-            @P("Start date ISO-8601 e.g. 2018-01-01, or null") String dateFrom,
-            @P("End date ISO-8601 e.g. 2024-12-31, or null") String dateTo) {
+            @P("Start date in ISO-8601 format, or null") String dateFrom,
+            @P("End date in ISO-8601 format, or null") String dateTo) {
         var timer = Timer.start(metrics);
         try {
             metrics.counter("graph.tool.calls", "tool", "detectConflictOfInterest").increment();

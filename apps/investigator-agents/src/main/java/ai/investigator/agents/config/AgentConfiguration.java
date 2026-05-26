@@ -6,92 +6,94 @@ import ai.investigator.agents.financial.FinancialFlowAgent;
 import ai.investigator.agents.observability.LangfuseObservabilityListener;
 import ai.investigator.agents.observability.LangfuseProperties;
 import ai.investigator.agents.person.PersonProfileAgent;
+import ai.investigator.agents.supervisor.SubagentTools;
 import ai.investigator.agents.supervisor.SupervisorAgent;
+import ai.investigator.agents.tools.CorporateAgentTool;
+import ai.investigator.agents.tools.DocumentAgentTool;
+import ai.investigator.agents.tools.FinancialFlowAgentTool;
+import ai.investigator.agents.tools.PersonProfileAgentTool;
+import ai.investigator.agents.tools.SourceVerificationAgentTool;
 import ai.investigator.agents.verification.SourceVerificationAgent;
 import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.chat.request.ResponseFormat;
-import dev.langchain4j.model.ollama.OllamaChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.service.AiServices;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
 @Configuration
-@EnableConfigurationProperties({OllamaProperties.class, LangfuseProperties.class})
+@EnableConfigurationProperties({MlxProperties.class, LangfuseProperties.class})
 public class AgentConfiguration {
 
+    private static final Logger log = LoggerFactory.getLogger(AgentConfiguration.class);
+
     @Bean
-    @Primary
-    public ChatModel ollamaChatModel(OllamaProperties props,
-                                     Optional<LangfuseObservabilityListener> langfuse) {
-        var builder = OllamaChatModel.builder()
+    public ChatModel chatModel(MlxProperties props,
+                               Optional<LangfuseObservabilityListener> langfuse) {
+        log.info("LLM provider: MLX [{} @ {}]", props.getModelId(), props.getBaseUrl());
+        var builder = OpenAiChatModel.builder()
             .baseUrl(props.getBaseUrl())
+            .apiKey("not-needed")
             .modelName(props.getModelId())
             .temperature(props.getTemperature())
-            .think(false)
-            .numCtx(props.getNumCtx())
-            .numPredict(props.getNumPredict())
-            .timeout(Duration.ofSeconds(props.getTimeoutSeconds()));
+            .maxTokens(props.getMaxTokens())
+            .timeout(Duration.ofSeconds(props.getTimeoutSeconds()))
+            .strictTools(false);
         langfuse.ifPresent(l -> builder.listeners(List.of(l)));
         return builder.build();
     }
 
-    // Shared model for every JSON-synthesis subagent and the Supervisor.
-    // Ollama's native JSON format is enabled so each response is guaranteed-parseable.
-    // numPredict is raised to 16k tokens so the Supervisor can emit a full merged
-    // report (4096 default truncates the JSON mid-array on multi-finding outputs).
-    @Bean("supervisorChatModel")
-    public ChatModel supervisorChatModel(OllamaProperties props,
-                                         Optional<LangfuseObservabilityListener> langfuse) {
-        var builder = OllamaChatModel.builder()
-            .baseUrl(props.getBaseUrl())
-            .modelName(props.getModelId())
-            .temperature(0.1)
-            .think(false)
-            .numCtx(props.getNumCtx())
-            .numPredict(16384)
-            .responseFormat(ResponseFormat.JSON)
-            .timeout(Duration.ofSeconds(props.getTimeoutSeconds()));
-        langfuse.ifPresent(l -> builder.listeners(List.of(l)));
-        return builder.build();
-    }
-
-    // --- Subagents: no tools registered. They receive pre-collected data and
-    //     emit JSON AgentReport. Each call is its own Langfuse trace. ---
-
     @Bean
-    public CorporateAgent corporateAgent(@Qualifier("supervisorChatModel") ChatModel model) {
-        return AiServices.builder(CorporateAgent.class).chatModel(model).build();
+    public CorporateAgent corporateAgent(ChatModel model, CorporateAgentTool tool) {
+        return AiServices.builder(CorporateAgent.class)
+            .chatModel(model)
+            .tools(tool)
+            .build();
     }
 
     @Bean
-    public PersonProfileAgent personProfileAgent(@Qualifier("supervisorChatModel") ChatModel model) {
-        return AiServices.builder(PersonProfileAgent.class).chatModel(model).build();
+    public PersonProfileAgent personProfileAgent(ChatModel model, PersonProfileAgentTool tool) {
+        return AiServices.builder(PersonProfileAgent.class)
+            .chatModel(model)
+            .tools(tool)
+            .build();
     }
 
     @Bean
-    public FinancialFlowAgent financialFlowAgent(@Qualifier("supervisorChatModel") ChatModel model) {
-        return AiServices.builder(FinancialFlowAgent.class).chatModel(model).build();
+    public FinancialFlowAgent financialFlowAgent(ChatModel model, FinancialFlowAgentTool tool) {
+        return AiServices.builder(FinancialFlowAgent.class)
+            .chatModel(model)
+            .tools(tool)
+            .build();
     }
 
     @Bean
-    public DocumentAgent documentAgent(@Qualifier("supervisorChatModel") ChatModel model) {
-        return AiServices.builder(DocumentAgent.class).chatModel(model).build();
+    public DocumentAgent documentAgent(ChatModel model, DocumentAgentTool tool) {
+        return AiServices.builder(DocumentAgent.class)
+            .chatModel(model)
+            .tools(tool)
+            .build();
     }
 
     @Bean
-    public SourceVerificationAgent sourceVerificationAgent(@Qualifier("supervisorChatModel") ChatModel model) {
-        return AiServices.builder(SourceVerificationAgent.class).chatModel(model).build();
+    public SourceVerificationAgent sourceVerificationAgent(ChatModel model, SourceVerificationAgentTool tool) {
+        return AiServices.builder(SourceVerificationAgent.class)
+            .chatModel(model)
+            .tools(tool)
+            .build();
     }
 
     @Bean
-    public SupervisorAgent supervisorAgent(@Qualifier("supervisorChatModel") ChatModel model) {
-        return AiServices.builder(SupervisorAgent.class).chatModel(model).build();
+    public SupervisorAgent supervisorAgent(ChatModel model, SubagentTools subagents) {
+        return AiServices.builder(SupervisorAgent.class)
+            .chatModel(model)
+            .tools(subagents)
+            .build();
     }
 }

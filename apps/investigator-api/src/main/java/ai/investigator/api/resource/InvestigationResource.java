@@ -1,7 +1,7 @@
 package ai.investigator.api.resource;
 
 import ai.investigator.agents.observability.LangfuseTraceContext;
-import ai.investigator.agents.supervisor.InvestigationOrchestrator;
+import ai.investigator.agents.supervisor.SupervisorAgent;
 import ai.investigator.domain.report.EntityMap;
 import ai.investigator.domain.report.InvestigationReport;
 import com.fasterxml.jackson.databind.MapperFeature;
@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +23,9 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequestMapping("/api/v1")
 public class InvestigationResource {
 
-    private final InvestigationOrchestrator orchestrator;
+    private static final Logger log = LoggerFactory.getLogger(InvestigationResource.class);
+
+    private final SupervisorAgent supervisor;
     private final MeterRegistry metrics;
     // SNAKE_CASE to match the LLM's output field names (entity_map, recommended_follow_ups, agent_source)
     private final ObjectMapper mapper = new ObjectMapper()
@@ -30,8 +34,8 @@ public class InvestigationResource {
 
     private final AtomicLong investigationCount = new AtomicLong(0);
 
-    public InvestigationResource(InvestigationOrchestrator orchestrator, MeterRegistry metrics) {
-        this.orchestrator = orchestrator;
+    public InvestigationResource(SupervisorAgent supervisor, MeterRegistry metrics) {
+        this.supervisor = supervisor;
         this.metrics = metrics;
     }
 
@@ -41,21 +45,36 @@ public class InvestigationResource {
         investigationCount.incrementAndGet();
         metrics.counter("investigations.total").increment();
 
-        // Each /investigate call is its own Langfuse session — without this the
-        // Sessions tab in Langfuse stays empty.
-        LangfuseTraceContext.setSession(UUID.randomUUID().toString());
+        // Group every LLM call of this investigation under one Langfuse session.
+        String session = UUID.randomUUID().toString();
+        LangfuseTraceContext.setSession(session);
+        long t0 = System.currentTimeMillis();
+        log.info("[INVESTIGATE-START] session={} query='{}' focus={}",
+            session, request.query(), request.focusEntities());
         try {
-            String rawResponse = orchestrator.investigate(request.query(), request.focusEntities());
+            String prompt = buildPrompt(request);
+            log.debug("[INVESTIGATE] supervisor prompt: {}", prompt);
+
+            String rawResponse = supervisor.investigate(prompt);
+            log.info("[INVESTIGATE] supervisor returned {} chars in {} ms",
+                rawResponse != null ? rawResponse.length() : 0,
+                System.currentTimeMillis() - t0);
+            log.debug("[INVESTIGATE] raw response: {}", rawResponse);
 
             InvestigationReport report = parseOrWrap(rawResponse, request.query());
 
             timer.stop(metrics.timer("investigations.latency"));
             metrics.counter("investigations.success").increment();
+            log.info("[INVESTIGATE-END] session={} findings={} total={} ms",
+                session, report.findings() != null ? report.findings().size() : 0,
+                System.currentTimeMillis() - t0);
             return ResponseEntity.ok(report);
 
         } catch (Exception e) {
             metrics.counter("investigations.errors").increment();
             timer.stop(metrics.timer("investigations.latency"));
+            log.error("[INVESTIGATE-FAIL] session={} after {} ms: {}",
+                session, System.currentTimeMillis() - t0, e.toString(), e);
             throw e;
         } finally {
             LangfuseTraceContext.clear();
@@ -65,6 +84,14 @@ public class InvestigationResource {
     @GetMapping("/metrics/investigation-stats")
     public ResponseEntity<InvestigationStats> investigationStats() {
         return ResponseEntity.ok(new InvestigationStats(investigationCount.get(), Instant.now().toString()));
+    }
+
+    private String buildPrompt(InvestigateRequest request) {
+        var sb = new StringBuilder("USER QUERY: ").append(request.query());
+        if (request.focusEntities() != null && !request.focusEntities().isEmpty()) {
+            sb.append("\nFOCUS ENTITIES: ").append(String.join(", ", request.focusEntities()));
+        }
+        return sb.toString();
     }
 
     private InvestigationReport parseOrWrap(String raw, String originalQuery) {

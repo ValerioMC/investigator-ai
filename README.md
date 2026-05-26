@@ -14,10 +14,19 @@ to answer complex investigative queries like:
 ### Prerequisites
 
 - Docker Desktop running
-- `minikube`, `kubectl`, `ollama`, Java 21, Maven 3.9+
+- `minikube`, `kubectl`, `pyenv`, Java 21, Maven 3.9+
+- Apple Silicon Mac (the LLM and embedding servers run locally on Metal via MLX)
 
-`make up` will pull `qwen3.6:35b` (~24 GB) and `nomic-embed-text` (~270 MB) via
-Ollama on first run if they are not already present.
+Before `make up`, start the two MLX servers on the host:
+
+```bash
+cd environment/mlx
+make                 # one-shot install of mlx + mlx-lm + mlx-embeddings
+make model-qwen      # pulls Qwen3.6-35B-A3B-4bit (~18 GB)
+make model-embed     # pulls nomicai-modernbert-embed-base-bf16 (~600 MB)
+make server &        # chat server on :8081
+make embed-server &  # embedding server on :8082
+```
 
 ### 1. Spin up everything
 
@@ -133,7 +142,7 @@ Langfuse observability is optional — disable with `langfuse.enabled=false`.
 ## All make targets
 
 ```
-make up              full setup: ollama check + minikube + infra + build + deploy + port-forward
+make up              full setup: mlx check + minikube + infra + build + deploy + port-forward
 make seed            load Ferretti scenario into Neo4j + bootstrap Langfuse
 make seed-langfuse   bootstrap Langfuse only (admin user, project, API keys) — idempotent
 make investigate     run the example query (curl to localhost:8080)
@@ -234,9 +243,9 @@ Captured from an actual run on the seeded scenario (qwen3.6:35b, ~6 minutes end-
 | Layer | Technology |
 |-------|-----------|
 | Runtime | Spring Boot 4.0 + Java 21 virtual threads |
-| AI | LangChain4j 1.14.1 + Ollama (qwen3.6:35b, think=false) |
+| AI | LangChain4j 1.15 + MLX on Apple Silicon (Qwen3.6-35B-A3B-4bit, MoE) |
 | Graph | Neo4j 5.x — Spring Data Neo4j 8, all Cypher in `@Query` on a single repo interface |
-| Vectors | Qdrant 1.x — 512-token chunks, nomic-embed-text embeddings |
+| Vectors | Qdrant 1.x — 512-token chunks, nomicai-modernbert-embed-base embeddings via MLX |
 | Persistence | PostgreSQL 16 + Spring Data JDBC + Liquibase |
 | Frontend | Vue 3 + Vite + Tailwind CSS + Cytoscape.js |
 | Observability | Langfuse v3 self-hosted (custom `LangfuseClient`) + Micrometer + Actuator |
@@ -256,13 +265,16 @@ Captured from an actual run on the seeded scenario (qwen3.6:35b, ~6 minutes end-
 ### investigator-agents internals
 
 ```
-InvestigationOrchestrator       ← main entry point, Java orchestration (no LLM in the hot path)
-  ├── *AgentTool classes         ← data collectors: hit Neo4j + Qdrant, return formatted strings
-  └── *Agent interfaces          ← LLM synthesis only, receive pre-collected text, emit JSON AgentReport
+SupervisorAgent                 ← LLM-driven orchestration (tool calling)
+  └── SubagentTools              ← exposes the 5 subagents as @Tool methods
+        ├── CorporateAgent       ← each subagent is itself an LLM
+        ├── PersonProfileAgent
+        ├── FinancialFlowAgent
+        ├── DocumentAgent
+        └── SourceVerificationAgent
+              └── *AgentTool     ← deterministic Neo4j/Qdrant accessors (formatted text)
 
-AgentConfiguration              ← two ChatModel beans:
-  ├── ollamaChatModel (primary)  ← default, all sub-agents
-  └── supervisorChatModel        ← responseFormat=JSON, numPredict=16384 (prevents mid-array truncation)
+AgentConfiguration              ← single ChatModel bean (OpenAiChatModel pointing at MLX server)
 
 LangfuseClient                  ← thin HTTP client for Langfuse ingestion API (fire-and-forget, virtual threads)
 LangfuseObservabilityListener   ← LangChain4j listener, attaches generation spans to parent span from context

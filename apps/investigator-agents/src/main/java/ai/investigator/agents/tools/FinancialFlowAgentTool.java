@@ -22,9 +22,15 @@ public class FinancialFlowAgentTool {
           "Balance sheet data is only available if financial records have been explicitly ingested. " +
           "Pass the exact legal company name.")
     public String analyzeFinancials(
-            @P("Exact legal name of the company, e.g. 'Costruzioni Ferretti Srl'") String companyName) {
+            @P("Exact legal name of the company") String companyName) {
         log.warn("[FINANCIAL-TOOL] called for: {}", companyName);
-        String result = graph.findContractsWonByCompany(companyName);
+        String result;
+        try {
+            result = graph.findContractsWonByCompany(companyName);
+        } catch (Exception e) {
+            log.error("[FINANCIAL-TOOL] findContractsWonByCompany threw {}: {}", e.getClass().getSimpleName(), e.getMessage(), e);
+            result = "findContractsWonByCompany unavailable (" + e.getClass().getSimpleName() + ")";
+        }
         log.warn("[FINANCIAL-TOOL] result for {}: {}", companyName, result);
         return result;
     }
