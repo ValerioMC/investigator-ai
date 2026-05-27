@@ -41,21 +41,21 @@ echo "==> Creating persons..."
 run_cypher "
 MERGE (p:Person {id: 'p-001'})
 SET p.fullName    = 'Marco Ferretti',
-    p.birthDate   = '1968-03-14',
+    p.birthDate   = date('1968-03-14'),
     p.nationality = 'IT',
     p.politicalRole = 'City Councillor, Brescia',
     p.riskScore   = 0.82;
 
 MERGE (p:Person {id: 'p-002'})
 SET p.fullName    = 'Luigi Conti',
-    p.birthDate   = '1971-09-22',
+    p.birthDate   = date('1971-09-22'),
     p.nationality = 'IT',
     p.politicalRole = 'Mayor of Brescia (2016-2024)',
     p.riskScore   = 0.75;
 
 MERGE (p:Person {id: 'p-003'})
 SET p.fullName    = 'Mario Conti',
-    p.birthDate   = '1975-06-08',
+    p.birthDate   = date('1975-06-08'),
     p.nationality = 'IT',
     p.riskScore   = 0.65;
 "
