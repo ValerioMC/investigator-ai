@@ -4,8 +4,7 @@ Journalistic investigation assistant combining a relationship graph (Neo4j),
 vector search (Qdrant), and a multi-agent LLM pipeline (Spring Boot + LangChain4j)
 to answer complex investigative queries like:
 
-> "Who really controls Ferretti Construction Ltd and are there any conflicts
-> of interest with the former mayor in the award of public contracts?"
+> "Who really controls Costruzioni Ferretti Srl, and are there conflicts of interest with ex-mayor Luigi Conti in the awarding of public contracts by Comune di Brescia in the period 2022–2023?"
 
 ---
 
@@ -51,7 +50,7 @@ Takes ~10 minutes on first run (image pulls + Maven build).
 make seed
 ```
 
-Populates Neo4j with a fictional corruption scenario (City of Brescia, 2022-2023)
+Populates Neo4j with a fictional corruption scenario (Comune di Brescia, 2022-2023)
 and bootstraps Langfuse with the default admin user, project, and API keys:
 
 | Entity | Type | Details |
@@ -59,7 +58,7 @@ and bootstraps Langfuse with the default admin user, project, and API keys:
 | Marco Ferretti | Person | City Councillor, risk 0.82 |
 | Luigi Conti | Person | Former Mayor (2016-2024), risk 0.75 |
 | Mario Conti | Person | Brother of Luigi, 15% stake in LuxHold |
-| Ferretti Construction Ltd | Company | Italian construction firm |
+| Costruzioni Ferretti Srl | Company | Italian construction firm |
 | LuxHold SA | Company | Luxembourg holding, tax haven |
 | Esposito Offshore Ltd | Company | Luxembourg shell, inactive since 2021 |
 | Loggia Square Redevelopment | Contract | €1.2M, awarded April 2022 |
@@ -76,11 +75,9 @@ make investigate
 
 This sends the following query to the SupervisorAgent:
 
-> **"Who really controls Ferretti Construction Ltd and are there any conflicts
-> of interest with former mayor Luigi Conti in the award of public contracts
-> by the City of Brescia in the 2022-2023 period?"**
+> **"Who really controls Costruzioni Ferretti Srl, and are there conflicts of interest with ex-mayor Luigi Conti in the awarding of public contracts by Comune di Brescia in the period 2022–2023?"**
 >
-> Focus entities: `Ferretti Construction Ltd`, `Marco Ferretti`, `Luigi Conti`
+> Focus entities: `Costruzioni Ferretti Srl`, `Marco Ferretti`, `Luigi Conti`
 > Depth: 4
 
 The `InvestigationOrchestrator` runs two phases per domain:
@@ -91,7 +88,7 @@ The `InvestigationOrchestrator` runs two phases per domain:
 - Neo4j traversal and Qdrant search via domain-specific `*AgentTool` classes
 
 **Phase 2 — LLM synthesis** (each subagent receives pre-collected data and emits a JSON `AgentReport`):
-1. **CorporateAgent** — ownership chain `Ferretti → LuxHold SA → Ferretti Construction Ltd`
+1. **CorporateAgent** — ownership chain `Ferretti → LuxHold SA → Costruzioni Ferretti Srl`
 2. **PersonProfileAgent** — Conti's mayoral role + family link to LuxHold
 3. **FinancialFlowAgent** — EBITDA anomaly (+340% vs. sector avg) in contract years
 4. **DocumentAgent** — semantic match across indexed docs
@@ -100,7 +97,7 @@ The `InvestigationOrchestrator` runs two phases per domain:
 All five JSON reports are bundled and fed to **SupervisorAgent** for final merge into `InvestigationReport`.
 
 Expected findings (from seeded graph):
-- `HIGH` — Ferretti is 77% beneficial owner of Ferretti Construction Ltd via LuxHold SA
+- `HIGH` — Ferretti is 77% beneficial owner of Costruzioni Ferretti Srl via LuxHold SA
 - `HIGH` — Luigi Conti voted on both contracts without declaring a conflict of interest (brother Mario owns 15% of LuxHold)
 - `MEDIUM` — Esposito Offshore (inactive) retains 8% stake in LuxHold — possible ownership-concealment vehicle
 
@@ -177,9 +174,9 @@ make k9s             open k9s on the investigator-ai cluster
 curl -s -X POST http://localhost:8080/api/v1/investigate \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "Who really controls Ferretti Construction Ltd and are there any conflicts of interest with former mayor Luigi Conti in the award of public contracts by the City of Brescia in the 2022-2023 period?",
+    "query": "Who really controls Costruzioni Ferretti Srl, and are there conflicts of interest with ex-mayor Luigi Conti in the awarding of public contracts by Comune di Brescia in the period 2022–2023?",
     "depth": 4,
-    "focusEntities": ["Ferretti Construction Ltd", "Marco Ferretti", "Luigi Conti"]
+    "focusEntities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"]
   }' | python3 -m json.tool
 ```
 
@@ -189,24 +186,24 @@ Captured from an actual run on the seeded scenario (qwen3.6:35b, ~6 minutes end-
 
 ```json
 {
-  "summary": "Marco Ferretti is the primary controller of Ferretti Construction Ltd, holding 77.0% of shares indirectly via LuxHold SA, while Mario Conti holds 15.0%. Luigi Conti, Mario Conti's brother, held a role at the City of Brescia during the period when Ferretti Construction Ltd was awarded two public contracts totaling €1,650,000. Multiple agents identified a conflict of interest regarding Luigi Conti's role at the City of Brescia coinciding with these contract awards, although no direct ownership link between Luigi Conti and the company was established.",
+  "summary": "Marco Ferretti is the primary controller of Costruzioni Ferretti Srl, holding 77.0% of shares indirectly via LuxHold SA, while Mario Conti holds 15.0%. Luigi Conti, Mario Conti's brother, held a role at the Comune di Brescia during the period when Costruzioni Ferretti Srl was awarded two public contracts totaling €1,650,000. Multiple agents identified a conflict of interest regarding Luigi Conti's role at the Comune di Brescia coinciding with these contract awards, although no direct ownership link between Luigi Conti and the company was established.",
   "findings": [
     {
-      "claim": "Marco Ferretti indirectly owns 77.0% of Ferretti Construction Ltd via LuxHold SA.",
+      "claim": "Marco Ferretti indirectly owns 77.0% of Costruzioni Ferretti Srl via LuxHold SA.",
       "confidence": "HIGH",
       "evidence": ["- Marco Ferretti → OWNS 77.0% (indirect via LuxHold SA, IT)"],
       "agent_source": "CorporateAgent"
     },
     {
-      "claim": "Marco Ferretti controls Ferretti Construction Ltd.",
+      "claim": "Marco Ferretti controls Costruzioni Ferretti Srl.",
       "confidence": "HIGH",
-      "evidence": ["COMPANIES CONTROLLED BY Marco Ferretti:", "- Ferretti Construction Ltd (Ltd, IT)"],
+      "evidence": ["COMPANIES CONTROLLED BY Marco Ferretti:", "- Costruzioni Ferretti Srl (Ltd, IT)"],
       "agent_source": "PersonProfileAgent"
     },
     {
-      "claim": "Ferretti Construction Ltd won the 'Loggia Square Redevelopment — Phase II' contract for €1,200,000 from the City of Brescia on 2022-04-15.",
+      "claim": "Costruzioni Ferretti Srl won the 'Loggia Square Redevelopment — Phase II' contract for €1,200,000 from the Comune di Brescia on 2022-04-15.",
       "confidence": "HIGH",
-      "evidence": ["- Loggia Square Redevelopment — Phase II: €1,200,000 from City of Brescia (2022-04-15)"],
+      "evidence": ["- Loggia Square Redevelopment — Phase II: €1,200,000 from Comune di Brescia (2022-04-15)"],
       "agent_source": "FinancialFlowAgent"
     },
     {
@@ -216,21 +213,21 @@ Captured from an actual run on the seeded scenario (qwen3.6:35b, ~6 minutes end-
       "agent_source": "DocumentAgent"
     },
     {
-      "claim": "Marco Ferretti is directly connected to Ferretti Construction Ltd in the graph (1 hop).",
+      "claim": "Marco Ferretti is directly connected to Costruzioni Ferretti Srl in the graph (1 hop).",
       "confidence": "HIGH",
-      "evidence": ["CONNECTION PATH (1 hops): Marco Ferretti → Ferretti Construction Ltd"],
+      "evidence": ["CONNECTION PATH (1 hops): Marco Ferretti → Costruzioni Ferretti Srl"],
       "agent_source": "SourceVerificationAgent"
     }
   ],
   "entity_map": {
     "persons": ["Marco Ferretti", "Mario Conti", "Luigi Conti"],
-    "companies": ["Ferretti Construction Ltd", "LuxHold SA"],
+    "companies": ["Costruzioni Ferretti Srl", "LuxHold SA"],
     "contracts": ["Loggia Square Redevelopment — Phase II", "Urban Road Network Extraordinary Maintenance"]
   },
   "recommended_follow_ups": [
-    "Verify Luigi Conti's specific title and decision-making authority at the City of Brescia during 2022-2023 to confirm the nature of the conflict of interest.",
+    "Verify Luigi Conti's specific title and decision-making authority at the Comune di Brescia during 2022-2023 to confirm the nature of the conflict of interest.",
     "Investigate the identity of the unknown entities holding the remaining 8.0% of LuxHold SA to determine if they are linked to other public officials.",
-    "Review the 'conti-statement-2022.txt' official filing for explicit declarations of interest regarding Ferretti Construction Ltd contracts."
+    "Review the 'conti-statement-2022.txt' official filing for explicit declarations of interest regarding Costruzioni Ferretti Srl contracts."
   ],
   "disclaimer": "This report is a journalistic aid. All claims require independent editorial verification before publication."
 }

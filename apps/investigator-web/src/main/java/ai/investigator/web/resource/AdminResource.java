@@ -41,7 +41,7 @@ public class AdminResource {
                 "news_article",
                 List.of("p-002", "c-001", "pb-001", "k-001"),
                 """
-                Brescia, 4 May 2022. The City of Brescia awarded Ferretti Construction Ltd
+                Brescia, 4 May 2022. The Comune di Brescia awarded Costruzioni Ferretti Srl
                 the tender for the Loggia Square Redevelopment (Phase II) for an amount of
                 1,200,000 euros. The resolution was approved in the City Council with the
                 favourable vote of Mayor Luigi Conti, in office since 2016. Internal
@@ -50,7 +50,7 @@ public class AdminResource {
                 institutional portal, did not declare the existence of family ties with
                 shareholders in the control chain of the winning company. The Brescia
                 Public Prosecutor's Office has launched preliminary checks on the regularity
-                of the procedure. Ferretti Construction Ltd is 100% controlled by the
+                of the procedure. Costruzioni Ferretti Srl is 100% controlled by the
                 Luxembourg holding LuxHold SA.
                 """
             ),
@@ -60,12 +60,12 @@ public class AdminResource {
                 List.of("p-002", "p-003", "c-001", "c-002", "pb-001"),
                 """
                 Brescia Court, case file no. 4471/2023. The Public Prosecutor has registered
-                Mr Luigi Conti, former Mayor of the City of Brescia in the 2016-2024 period,
+                Mr Luigi Conti, former Mayor of the Comune di Brescia in the 2016-2024 period,
                 in the suspects register on alleged charges of conflict of interest and
                 failure to disclose indirect equity stakes. From the records it emerges that
                 the suspect's brother, Mario Conti, holds a 15% stake in the LuxHold SA
                 holding company based in Luxembourg. LuxHold SA controls 100% of Ferretti
-                Construction Ltd, awarded two public contracts by the City of Brescia in
+                Construction Ltd, awarded two public contracts by the Comune di Brescia in
                 the 2022-2023 biennium for a total value of 1,650,000 euros. The file also
                 includes elements relating to Esposito Offshore Ltd, a Luxembourg company
                 no longer active that featured among the shareholders of the controlling
@@ -95,7 +95,7 @@ public class AdminResource {
                 LuxHold SA — Consolidated financial statements 2022 filed with the Registre
                 de Commerce et des Sociétés of Luxembourg. Share capital: 1,250,000 euros.
                 Declared shareholders: Marco Ferretti (77%), Mario Conti (15%), Esposito
-                Offshore Ltd (8%). The only operating subsidiary is Ferretti Construction Ltd
+                Offshore Ltd (8%). The only operating subsidiary is Costruzioni Ferretti Srl
                 based in Italy, construction and public works sector. Consolidated revenues
                 2022: 4,300,000 euros, +38% compared to 2021. Growth is predominantly linked
                 to public contracts awarded in Lombardy.

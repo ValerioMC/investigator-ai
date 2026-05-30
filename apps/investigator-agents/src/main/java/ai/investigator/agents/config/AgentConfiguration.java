@@ -44,6 +44,7 @@ public class AgentConfiguration {
             .temperature(props.getTemperature())
             .maxTokens(props.getMaxTokens())
             .timeout(Duration.ofSeconds(props.getTimeoutSeconds()))
+            .responseFormat("json_object")
             .strictTools(false);
         langfuse.ifPresent(l -> builder.listeners(List.of(l)));
         return builder.build();

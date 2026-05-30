@@ -63,10 +63,10 @@ SET p.fullName    = 'Mario Conti',
 echo "==> Creating companies..."
 run_cypher "
 MERGE (c:Company {id: 'c-001'})
-SET c.name                 = 'Ferretti Construction Ltd',
+SET c.name                 = 'Costruzioni Ferretti Srl',
     c.registrationNumber   = 'IT03847291006',
     c.jurisdiction         = 'IT',
-    c.legalForm            = 'Ltd',
+    c.legalForm            = 'Srl',
     c.active               = true;
 
 MERGE (c:Company {id: 'c-002'})
@@ -89,7 +89,7 @@ SET c.name                 = 'Esposito Offshore Ltd',
 echo "==> Creating contracts and public body..."
 run_cypher "
 MERGE (pb:PublicBody {id: 'pb-001'})
-SET pb.name   = 'City of Brescia',
+SET pb.name   = 'Comune di Brescia',
     pb.type   = 'Municipality',
     pb.region = 'Lombardy';
 
@@ -97,14 +97,14 @@ MERGE (k:Contract {id: 'k-001'})
 SET k.title          = 'Loggia Square Redevelopment — Phase II',
     k.amount         = 1200000,
     k.awardedAt      = date('2022-04-15'),
-    k.publicBodyName = 'City of Brescia',
+    k.publicBodyName = 'Comune di Brescia',
     k.suspicionScore = 0.88;
 
 MERGE (k:Contract {id: 'k-002'})
 SET k.title          = 'Urban Road Network Extraordinary Maintenance',
     k.amount         = 450000,
     k.awardedAt      = date('2023-01-20'),
-    k.publicBodyName = 'City of Brescia',
+    k.publicBodyName = 'Comune di Brescia',
     k.suspicionScore = 0.71;
 "
 
@@ -202,7 +202,7 @@ MATCH (mario:Person {id: 'p-003'}), (d2:Document {id: 'd-002'})
 MERGE (mario)-[:MENTIONED_IN {context: 'undisclosed shareholder in LuxHold SA'}]->(d2);
 
 MATCH (ltd:Company {id: 'c-001'}), (d2:Document {id: 'd-002'})
-MERGE (ltd)-[:MENTIONED_IN {context: 'recipient of City of Brescia contracts 2022-2023'}]->(d2);
+MERGE (ltd)-[:MENTIONED_IN {context: 'recipient of Comune di Brescia contracts 2022-2023'}]->(d2);
 
 MATCH (lux:Company {id: 'c-002'}), (d2:Document {id: 'd-002'})
 MERGE (lux)-[:MENTIONED_IN {context: 'controlling holding registered in Luxembourg'}]->(d2);

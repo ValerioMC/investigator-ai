@@ -108,16 +108,16 @@ investigate:
 	curl -s -X POST $(API_URL)/api/v1/investigate \
 	  -H "Content-Type: application/json" \
 	  -d '{ \
-	    "query": "Who really controls Ferretti Construction Ltd and are there any conflicts of interest with former mayor Luigi Conti in the award of public contracts by the City of Brescia in the 2022-2023 period?", \
+	    "query": "Who really controls Costruzioni Ferretti Srl, and are there conflicts of interest with ex-mayor Luigi Conti in the awarding of public contracts by Comune di Brescia in the period 2022–2023?", \
 	    "depth": 4, \
-	    "focus_entities": ["Ferretti Construction Ltd", "Marco Ferretti", "Luigi Conti"] \
+	    "focusEntities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"] \
 	  }' | python3 -m json.tool 2>/dev/null || \
 	curl -s -X POST $(API_URL)/api/v1/investigate \
 	  -H "Content-Type: application/json" \
 	  -d '{ \
-	    "query": "Who really controls Ferretti Construction Ltd and are there any conflicts of interest with former mayor Luigi Conti in the award of public contracts by the City of Brescia in the 2022-2023 period?", \
+	    "query": "Who really controls Costruzioni Ferretti Srl, and are there conflicts of interest with ex-mayor Luigi Conti in the awarding of public contracts by Comune di Brescia in the period 2022–2023?", \
 	    "depth": 4, \
-	    "focus_entities": ["Ferretti Construction Ltd", "Marco Ferretti", "Luigi Conti"] \
+	    "focusEntities": ["Costruzioni Ferretti Srl", "Marco Ferretti", "Luigi Conti"] \
 	  }'
 	@echo ""
 

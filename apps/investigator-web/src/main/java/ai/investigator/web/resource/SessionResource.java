@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -77,9 +78,7 @@ public class SessionResource {
             String rawReport = extractJson(rawText);
             if (rawReport == null) {
                 log.warn("LLM did not return valid JSON for session {}", session.id);
-                rawReport = "{\"query\":\"\",\"summary\":\"LLM response was not valid JSON.\","
-                    + "\"findings\":[],\"entityMap\":{\"persons\":[],\"companies\":[],\"contracts\":[]},"
-                    + "\"recommendedFollowUps\":[],\"disclaimer\":\"Response parsing failed.\"}";
+                rawReport = fallbackReport(req.query(), "LLM response was not valid JSON.");
             }
             final String finalReport = rawReport;
             session = completeSession(session.id, finalReport);
@@ -171,22 +170,39 @@ public class SessionResource {
         return count;
     }
 
+    private String fallbackReport(String query, String summary) {
+        var report = Map.of(
+            "query", query == null ? "" : query,
+            "summary", summary,
+            "findings", List.of(),
+            "entityMap", Map.of(
+                "persons", List.of(),
+                "companies", List.of(),
+                "contracts", List.of()
+            ),
+            "recommendedFollowUps", List.of(),
+            "disclaimer", "Response parsing failed."
+        );
+        try {
+            return mapper.writeValueAsString(report);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialize fallback report", e);
+        }
+    }
+
     private String extractJson(String raw) {
         if (raw == null || raw.isBlank()) return null;
         log.warn("Raw LLM response (first 1000 chars): {}",
             raw.length() > 1000 ? raw.substring(0, 1000) + "..." : raw);
 
-        String cleaned = raw.replaceAll("(?s)<think>.*?</think>", "").trim();
-        cleaned = cleaned.replaceAll("(?s)```(?:json)?\\s*", "").trim();
-
-        int start = cleaned.indexOf('{');
-        int end = cleaned.lastIndexOf('}');
+        int start = raw.indexOf('{');
+        int end = raw.lastIndexOf('}');
         if (start < 0 || end <= start) {
-            log.warn("Could not find JSON object in LLM response. Cleaned: {}",
-                cleaned.length() > 300 ? cleaned.substring(0, 300) : cleaned);
+            log.warn("Could not find JSON object in LLM response: {}",
+                raw.length() > 300 ? raw.substring(0, 300) : raw);
             return null;
         }
-        String candidate = cleaned.substring(start, end + 1);
+        String candidate = raw.substring(start, end + 1);
 
         try {
             mapper.readTree(candidate);

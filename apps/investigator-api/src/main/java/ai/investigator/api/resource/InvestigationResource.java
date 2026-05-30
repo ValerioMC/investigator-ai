@@ -95,22 +95,20 @@ public class InvestigationResource {
     }
 
     private InvestigationReport parseOrWrap(String raw, String originalQuery) {
+        if (raw == null || raw.isBlank()) {
+            return new InvestigationReport(originalQuery, "Agent returned no response.",
+                List.of(), EntityMap.empty(),
+                List.of("Check LLM server logs — model may have exceeded max_tokens during reasoning."),
+                "This report is a journalistic aid. Claims require editorial verification before publication.");
+        }
         try {
-            String json = raw.replaceAll("(?s)<think>.*?</think>", "").trim();
-            json = json.replaceAll("(?s)```(?:json)?\\s*", "").trim();
-            int start = json.indexOf('{');
-            int end   = json.lastIndexOf('}');
-            if (start != -1 && end > start) json = json.substring(start, end + 1);
-            return mapper.readValue(json, InvestigationReport.class);
+            return mapper.readValue(raw, InvestigationReport.class);
         } catch (Exception e) {
-            return new InvestigationReport(
-                originalQuery,
-                raw.length() > 500 ? raw.substring(0, 500) + "..." : raw,
-                List.of(),
-                EntityMap.empty(),
+            String summary = raw.length() > 500 ? raw.substring(0, 500) + "..." : raw;
+            return new InvestigationReport(originalQuery, summary,
+                List.of(), EntityMap.empty(),
                 List.of("Review raw agent output manually"),
-                "This report is a journalistic aid. Claims require editorial verification before publication."
-            );
+                "This report is a journalistic aid. Claims require editorial verification before publication.");
         }
     }
 
